@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ifExists, writeFileAtomically } from "../fs.ts";
 import type { CheckedPRs } from "../github/prs.ts";
+import type { FeatureLink } from "../stunt/features.ts";
 import type { IssueTracker } from "../stunt/issue-trackers.ts";
 import type { Task } from "../stunt/tasks.ts";
 
@@ -15,9 +16,12 @@ export type State = CheckedPRs & {
   // The Issue tracker of each repository the last check saw that declares
   // one stunt groups by.
   issueTrackers: Record<string, IssueTracker>;
+  // Each Local Markdown repository's links of its Assigned PRs to Features,
+  // in Feature slug order, then Ticket number order.
+  featureLinks: Record<string, FeatureLink[]>;
 };
 
-const EMPTY: State = { assignedPRs: [], reviewInbox: [], tasks: [], issueTrackers: {} };
+const EMPTY: State = { assignedPRs: [], reviewInbox: [], tasks: [], issueTrackers: {}, featureLinks: {} };
 
 export function defaultDataDir(home: string): string {
   return path.join(home, ".local", "share", "stunt");
@@ -34,8 +38,8 @@ export function openStore(dataDir: string) {
   async function load(): Promise<State> {
     const text = await ifExists(readFile(statePath, "utf8"));
     if (text === undefined) return EMPTY;
-    // A state saved before the Review inbox, Tasks, or Issue trackers existed
-    // has none.
+    // A state saved before the Review inbox, Tasks, Issue trackers, or
+    // Feature links existed has none.
     return { ...EMPTY, ...(JSON.parse(text) as Partial<State>) };
   }
 

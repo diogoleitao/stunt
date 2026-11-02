@@ -1,5 +1,6 @@
 import type { State } from "../data/store.ts";
 import type { AssignedPR, Review, ReviewInboxPR } from "../github/prs.ts";
+import type { FeatureLink } from "./features.ts";
 import type { IssueTracker } from "./issue-trackers.ts";
 import { requestTime, type Task, taskActor, taskTime } from "./tasks.ts";
 
@@ -20,10 +21,10 @@ export type AssignedPRRow = {
   pendingReviewers: string[];
 };
 
-// Assigned PRs under the Feature they ship. Every PR is Unfiled until
-// Feature grouping lands, so the Feature is always null for now.
+// Assigned PRs under the Feature they ship, by the Feature's name, or under
+// Unfiled when the Feature is null.
 export type AssignedPRGroup = {
-  feature: null;
+  feature: string | null;
   prs: AssignedPRRow[];
 };
 
@@ -81,7 +82,9 @@ export type RepositoryModel = {
   counts:{ tasks: number; assignedPRs: number; reviewInbox: number };
   // Grouped by PR, the PR with the oldest Task first.
   tasks: TaskGroup[];
-  // Grouped by Feature, Unfiled last, most recently updated first in each.
+  // Grouped by Feature, the Feature with the most recently updated PR first,
+  // each Feature's PRs in Ticket order, then Unfiled, most recently updated
+  // first.
   assignedPRs: AssignedPRGroup[];
   // Oldest request first.
   reviewInbox: ReviewInboxRow[];
@@ -214,9 +217,35 @@ function assignedPRRow(pr: AssignedPR, tasks: Task[], now: Date): AssignedPRRow 
   };
 }
 
-// Every PR under Unfiled, and no group when there are none.
-function unfiled(prs: AssignedPRRow[]): AssignedPRGroup[] {
-  return prs.length === 0 ? [] : [{ feature: null, prs }];
+// A Feature's name from its slug: hyphens as spaces, first letter capital.
+function featureName(slug: string): string {
+  const words = slug.replaceAll("-", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// `prs` under the Feature whose Ticket `links` them, the Feature with the
+// most recently updated PR first, each Feature's PRs in Ticket order. The
+// PRs no Ticket links are Unfiled, last, most recently updated first.
+function assignedPRGroups(
+  prs: AssignedPR[],
+  links: FeatureLink[],
+  row: (pr: AssignedPR) => AssignedPRRow,
+): AssignedPRGroup[] {
+  // Each linked PR's Feature slug and its place in Ticket order.
+  const linked = new Map(links.map(({ number, featureSlug }, order) => [number, { featureSlug, order }]));
+  const ticketOrder = (pr: AssignedPR) => linked.get(pr.number)?.order ?? 0;
+  const features = new Map<string, AssignedPR[]>();
+  const unfiled: AssignedPR[] = [];
+  for (const pr of prs.toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))) {
+    const featureSlug = linked.get(pr.number)?.featureSlug;
+    if (featureSlug === undefined) unfiled.push(pr);
+    else features.set(featureSlug, [...(features.get(featureSlug) ?? []), pr]);
+  }
+  const groups = [...features].map(([featureSlug, prs]) => ({
+    feature: featureName(featureSlug),
+    prs: prs.toSorted((a, b) => ticketOrder(a) - ticketOrder(b)).map(row),
+  }));
+  return unfiled.length === 0 ? groups : [...groups, { feature: null, prs: unfiled.map(row) }];
 }
 
 export function pageModel(state: State, now: Date): PageModel {
@@ -229,10 +258,8 @@ export function pageModel(state: State, now: Date): PageModel {
       issueTracker: state.issueTrackers[name] ?? null,
       counts: { tasks: tasks.length, assignedPRs: assignedPRs.length, reviewInbox: reviewInbox.length },
       tasks: taskGroups(tasks, now),
-      assignedPRs: unfiled(
-        assignedPRs
-          .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-          .map((pr) => assignedPRRow(pr, tasks, now)),
+      assignedPRs: assignedPRGroups(assignedPRs, state.featureLinks[name] ?? [], (pr) =>
+        assignedPRRow(pr, tasks, now),
       ),
       reviewInbox: reviewInbox
         .toSorted((a, b) => requestTime(a) - requestTime(b))

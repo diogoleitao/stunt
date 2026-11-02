@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { cloneKey, findClones, isClone } from "../clones/clones.ts";
-import type { Config } from "../config/config.ts";
+import { cloneKey } from "../clones/clones.ts";
 import { ifExists } from "../fs.ts";
 import type { GitHubClient } from "../github/client.ts";
 import { fetchDeclarations } from "../github/declarations.ts";
@@ -28,21 +27,14 @@ function declaredTracker(declaration: string): IssueTracker | undefined {
 
 // The Issue tracker of each of `repositories` that declares one stunt
 // groups by. The declaration is read from the working tree of the
-// repository's local clone, so a declaration kept out of git still counts,
-// and from its GitHub default branch only when it has no clone. A clone the
-// config names wins over the scan, unless it is not a clone, which is
-// warned about and left out.
+// repository's local clone among `clones`, so a declaration kept out of git
+// still counts, and from its GitHub default branch only when it has no
+// clone.
 export async function readIssueTrackers(
   github: GitHubClient,
   repositories: string[],
-  { cloneRoot, clones: configured }: Pick<Config, "cloneRoot" | "clones">,
+  clones: Map<string, string>,
 ): Promise<Record<string, IssueTracker>> {
-  const clones = await findClones(cloneRoot);
-  for (const [repository, clone] of Object.entries(configured)) {
-    if (await isClone(clone)) clones.set(cloneKey(repository), clone);
-    else console.warn(`stunt: the clone of ${repository} in the config, ${clone}, is not a git clone`);
-  }
-
   const declarations = new Map<string, string>();
   const withoutClone: string[] = [];
   for (const repository of repositories) {

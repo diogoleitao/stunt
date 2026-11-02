@@ -1,5 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import type { Config } from "../config/config.ts";
 import { ifExists } from "../fs.ts";
 
 // How many directories below the clone root a clone is looked for: up to
@@ -65,5 +66,20 @@ export async function findClones(root: string): Promise<Map<string, string>> {
   }
 
   await visit(root, 0);
+  return clones;
+}
+
+// The clones below the clone root, by key, and the clones the config names.
+// A clone the config names wins over the scan, unless it is not a clone,
+// which is warned about and left out.
+export async function locateClones({
+  cloneRoot,
+  clones: configured,
+}: Pick<Config, "cloneRoot" | "clones">): Promise<Map<string, string>> {
+  const clones = await findClones(cloneRoot);
+  for (const [repository, clone] of Object.entries(configured)) {
+    if (await isClone(clone)) clones.set(cloneKey(repository), clone);
+    else console.warn(`stunt: the clone of ${repository} in the config, ${clone}, is not a git clone`);
+  }
   return clones;
 }

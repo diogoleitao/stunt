@@ -1,7 +1,9 @@
+import { locateClones } from "../clones/clones.ts";
 import { readConfig } from "../config/config.ts";
 import { openStore } from "../data/store.ts";
 import type { GitHubClient } from "../github/client.ts";
 import { fetchPRs } from "../github/prs.ts";
+import { readFeatureLinks } from "./features.ts";
 import { readIssueTrackers } from "./issue-trackers.ts";
 import { type Notification, notifications } from "./notifications.ts";
 import { type PageModel, pageModel } from "./page-model.ts";
@@ -22,8 +24,9 @@ export function openStunt({ github, dataDir, configPath, home, clock }: StuntOpt
   const store = openStore(dataDir);
 
   // Asks GitHub once for what changed, reads the Issue tracker of each
-  // repository it saw, stores what it saw, and turns new activity into
-  // Tasks. Resolves to the Notifications announcing them.
+  // repository it saw and the Features its Assigned PRs ship, stores what it
+  // saw, and turns new activity into Tasks. Resolves to the Notifications
+  // announcing them.
   async function check(): Promise<Notification[]> {
     const checkedAt = clock.now().toISOString();
     const config = await readConfig(configPath, home);
@@ -34,10 +37,12 @@ export function openStunt({ github, dataDir, configPath, home, clock }: StuntOpt
       known: new Set(tasks.map((task) => task.id)),
     });
     const repositories = new Set([...prs.assignedPRs, ...prs.reviewInbox].map((pr) => pr.repository));
-    const issueTrackers = await readIssueTrackers(github, [...repositories], config);
+    const clones = await locateClones(config);
+    const issueTrackers = await readIssueTrackers(github, [...repositories], clones);
+    const featureLinks = await readFeatureLinks(prs.assignedPRs, issueTrackers, clones);
     let created: Task[] = [];
     await store.update((state) => {
-      const next = { ...applyCheck(state, prs, checkedAt), issueTrackers };
+      const next = { ...applyCheck(state, prs, checkedAt), issueTrackers, featureLinks };
       const known = new Set(state.tasks.map((task) => task.id));
       created = next.tasks.filter((task) => !known.has(task.id));
       return next;

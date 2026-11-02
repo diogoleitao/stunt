@@ -122,6 +122,13 @@ async function clone(at: string, url: string, declaration?: string) {
   await writeFile(path.join(at, "docs", "agents", "issue-tracker.md"), declaration);
 }
 
+// Writes `text` at `file` under the `.scratch` tree of the clone at `at`,
+// such as a Ticket at `<feature-slug>/issues/NN-<slug>.md`.
+async function scratch(at: string, file: string, text: string) {
+  await mkdir(path.dirname(path.join(at, ".scratch", file)), { recursive: true });
+  await writeFile(path.join(at, ".scratch", file), text);
+}
+
 // Each repository's Issue tracker in `model`, by name.
 function issueTrackers(model: Awaited<ReturnType<typeof modelOf>>) {
   return Object.fromEntries(model.repositories.map((repository) => [repository.name, repository.issueTracker]));
@@ -1819,6 +1826,162 @@ describe("the Issue tracker", () => {
     await expect(stunt(fakeGitHub([checkResponse(assignedFull)])).check()).rejects.toThrow(
       `config file ${configPath()}: ${message}`,
     );
+  });
+});
+
+describe("Feature grouping in a Local Markdown repository", () => {
+  const LOCAL_MARKDOWN = "# Issue tracker: Local Markdown\n\nIssues and specs for this repo live as markdown files in `.scratch/`.\n";
+
+  // Makes a Local Markdown clone of `repository` under ~/repos, and gives its
+  // path.
+  async function localMarkdownClone(repository: string) {
+    const at = path.join(home(), "repos", repository);
+    await clone(at, `git@github.com:${repository}.git`, LOCAL_MARKDOWN);
+    return at;
+  }
+
+  // A Ticket naming its PR in its header, the way the implement skills write
+  // it.
+  function ticket(title: string, pr: number) {
+    return `# ${title}\n\nStatus: ready-for-agent\n\n**PR:** #${pr} (merged 2026-10-26, squash \`f921607e9\`)\n\n## What to build\n\nThe change.\n`;
+  }
+
+  // The rows of `numbers` in `repository` after a check of
+  // assigned-prs-full.json at NOW, in that order.
+  function rows(repository: string, ...numbers: number[]) {
+    const prs = ALL_ASSIGNED.repositories
+      .find((candidate) => candidate.name === repository)
+      ?.assignedPRs.flatMap((group) => group.prs);
+    return numbers.map((number) => {
+      const row = prs?.find((pr) => pr.number === number);
+      if (row === undefined) throw new Error(`no Assigned PR row for ${repository}#${number}`);
+      return row;
+    });
+  }
+
+  // The Assigned PR groups of `repository` in `model`.
+  function groupsOf(model: Awaited<ReturnType<typeof modelOf>>, repository: string) {
+    return model.repositories.find((candidate) => candidate.name === repository)?.assignedPRs;
+  }
+
+  it("groups an Assigned PR under the Feature, named after it, whose Ticket's PR line names it, with Unfiled last", async () => {
+    const at = await localMarkdownClone("owner-2/repo-4");
+    await scratch(at, "cart-pending-changes/spec.md", "# Cart pending changes\n");
+    await scratch(at, "cart-pending-changes/issues/01-reconcile-payment-step-registries.md", ticket("01. Reconcile", 25));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25) },
+      { feature: null, prs: rows("owner-2/repo-4", 28, 27) },
+    ]);
+  });
+
+  it("links a PR by a PR line anywhere in a Ticket, and by no other mention in a Ticket or spec", async () => {
+    const at = await localMarkdownClone("owner-2/repo-4");
+    await scratch(
+      at,
+      "cart-pending-changes/spec.md",
+      "# Cart pending changes\n\n**PR:** #28\n\n- History: the flag was introduced in PR #28.\n",
+    );
+    await scratch(at, "cart-pending-changes/map.md", "# Cart pending changes\n\n**PR:** #28\n");
+    await scratch(
+      at,
+      "cart-pending-changes/issues/01-reconcile-payment-step-registries.md",
+      "# 01. Reconcile\n\nStacked on #27\n\nThe change, see **PR:** #28.\n\n## Comments\n\n2026-10-26: shipped in PR #27.\n\n**PR:** #25\n",
+    );
+    await scratch(at, "cart-pending-changes/issues/notes.md", "**PR:** #27\n");
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25) },
+      { feature: null, prs: rows("owner-2/repo-4", 28, 27) },
+    ]);
+  });
+
+  it("orders Features by their most recently updated PR, and each Feature's PRs by Ticket number", async () => {
+    const at = await localMarkdownClone("owner-1/repo-2");
+    // #10412 was updated after #9968, but its Ticket comes later.
+    await scratch(at, "cart-pending-changes/issues/99-reconcile.md", ticket("99. Reconcile", 9968));
+    await scratch(at, "cart-pending-changes/issues/100-registry.md", ticket("100. Registry", 10412));
+    // #10420 was updated last of all.
+    await scratch(at, "oci-braintree/issues/01-skip-stripe-steps.md", ticket("01. Skip Stripe steps", 10420));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 9968, 10412) },
+    ]);
+  });
+
+  it("keeps a PR two Tickets link under the first Feature by name", async () => {
+    const at = await localMarkdownClone("owner-1/repo-2");
+    await scratch(at, "oci-braintree/issues/01-skip-stripe-steps.md", ticket("01. Skip Stripe steps", 10420));
+    await scratch(at, "cart-pending-changes/issues/02-registry.md", ticket("02. Registry", 10420));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 10420) },
+      { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+    ]);
+  });
+
+  it("orders a PR two Tickets of one Feature link by the lower Ticket number", async () => {
+    const at = await localMarkdownClone("owner-1/repo-2");
+    // #10412 was updated after #9968.
+    await scratch(at, "cart-pending-changes/issues/01-reconcile.md", ticket("01. Reconcile", 9968));
+    await scratch(at, "cart-pending-changes/issues/02-registry.md", ticket("02. Registry", 10412));
+    await scratch(at, "cart-pending-changes/issues/03-follow-up.md", ticket("03. Follow up", 9968));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 9968, 10412) },
+      { feature: null, prs: rows("owner-1/repo-2", 10420) },
+    ]);
+  });
+
+  it("leaves the Review inbox not grouped by Feature, though a Ticket links its PR", async () => {
+    const inbox = inboxRows(await modelOf(checkResponse(assignedFull, inboxFull)), "owner-1/repo-2");
+    const at = await localMarkdownClone("owner-1/repo-2");
+    await scratch(at, "cart-pending-changes/issues/01-reconcile.md", ticket("01. Reconcile", 10419));
+    await scratch(at, "cart-pending-changes/issues/02-registry.md", ticket("02. Registry", 10420));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)]));
+
+    await app.check();
+
+    const model = await app.pageModel();
+    expect(inboxRows(model, "owner-1/repo-2")).toEqual(inbox);
+    expect(inbox.map((pr) => pr.number)).toContain(10419);
+    expect(groupsOf(model, "owner-1/repo-2")).toEqual([
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 10420) },
+      { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+    ]);
+  });
+
+  it("leaves every Assigned PR Unfiled in a Local Markdown repository without a clone, and in a GitHub repository's clone", async () => {
+    const at = path.join(home(), "repos", "owner-2", "repo-4");
+    await clone(at, "git@github.com:owner-2/repo-4.git", DECLARED.object.text);
+    await scratch(at, "cart-pending-changes/issues/01-reconcile.md", ticket("01. Reconcile", 25));
+    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, {
+      "owner-1/repo-2": { object: { text: LOCAL_MARKDOWN } },
+    });
+    const app = stunt(github);
+
+    await app.check();
+
+    const model = await app.pageModel();
+    expect(issueTrackers(model)).toMatchObject({ "owner-1/repo-2": "Local Markdown", "owner-2/repo-4": "GitHub" });
+    expect(groupsOf(model, "owner-1/repo-2")).toEqual([{ feature: null, prs: rows("owner-1/repo-2", 10420, 10412, 9968) }]);
+    expect(groupsOf(model, "owner-2/repo-4")).toEqual([{ feature: null, prs: rows("owner-2/repo-4", 28, 27, 25) }]);
   });
 });
 
