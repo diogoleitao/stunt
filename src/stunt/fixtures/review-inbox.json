@@ -1,0 +1,1339 @@
+{
+  "data": {
+    "viewer": {
+      "login": "user-1"
+    },
+    "inbox": {
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "Y3Vyc29yOjE3"
+      },
+      "nodes": [
+        {
+          "number": 10419,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 1",
+          "url": "https://github.com/owner-1/repo-2/pull/10419",
+          "updatedAt": "2026-10-30T16:50:23Z",
+          "author": {
+            "login": "user-5"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-4"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-30T16:36:43Z",
+                "actor": {
+                  "login": "user-5"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-30T16:36:53Z",
+                "actor": {
+                  "login": "user-5"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-4"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 365,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 2",
+          "url": "https://github.com/owner-1/repo-5/pull/365",
+          "updatedAt": "2026-10-28T16:48:05Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-28T16:47:44Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 364,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 3",
+          "url": "https://github.com/owner-1/repo-5/pull/364",
+          "updatedAt": "2026-10-30T10:37:16Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-28T15:58:32Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 363,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 4",
+          "url": "https://github.com/owner-1/repo-5/pull/363",
+          "updatedAt": "2026-10-30T10:48:16Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-28T15:58:27Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 10404,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 5",
+          "url": "https://github.com/owner-1/repo-2/pull/10404",
+          "updatedAt": "2026-11-02T08:52:50Z",
+          "author": {
+            "login": "user-3"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T16:29:42Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T16:31:53Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T16:32:37Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T18:44:11Z",
+                "author": {
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-29T16:20:42Z",
+                "actor": {
+                  "login": "user-3"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-29T18:39:03Z",
+                "actor": {
+                  "login": "user-3"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-30T11:56:08Z",
+                "actor": {
+                  "login": "user-3"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-29T16:20:36Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 362,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 6",
+          "url": "https://github.com/owner-1/repo-5/pull/362",
+          "updatedAt": "2026-10-28T16:36:36Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-28T15:04:32Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-28T15:04:26Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 359,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 7",
+          "url": "https://github.com/owner-1/repo-5/pull/359",
+          "updatedAt": "2026-10-30T10:36:20Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-30T08:50:56Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 353,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 8",
+          "url": "https://github.com/owner-1/repo-5/pull/353",
+          "updatedAt": "2026-10-30T11:57:37Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-10-27T15:49:34Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:07Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:10Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:13Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:16Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:19Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:21Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:23Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:25Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:27Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T08:54:30Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-10-28T14:26:55Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:09Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:11Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:14Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:17Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:20Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:22Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:25Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:28Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:30Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:33Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:36Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-28T15:31:38Z",
+                "author": {
+                  "login": "user-6"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-7"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-27T15:25:18Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-28T08:54:33Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-28T08:54:33Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-7"
+                }
+              },
+              {
+                "createdAt": "2026-10-28T15:31:42Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-27T15:25:10Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 348,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 9",
+          "url": "https://github.com/owner-1/repo-5/pull/348",
+          "updatedAt": "2026-10-30T08:50:00Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-23T17:36:10Z",
+                "author": {
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-7"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-22T15:07:02Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-7"
+                }
+              },
+              {
+                "createdAt": "2026-10-22T15:07:02Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-30T08:50:00Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-26T14:52:27Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 345,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 10",
+          "url": "https://github.com/owner-1/repo-5/pull/345",
+          "updatedAt": "2026-10-30T08:49:41Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-30T08:49:41Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-22T11:01:43Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 10306,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 11",
+          "url": "https://github.com/owner-1/repo-2/pull/10306",
+          "updatedAt": "2026-11-02T08:40:24Z",
+          "author": {
+            "login": "user-2"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-26T14:14:07Z",
+                "actor": {
+                  "login": "user-2"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 368,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 12",
+          "url": "https://github.com/owner-1/repo-3/pull/368",
+          "updatedAt": "2026-11-02T08:40:23Z",
+          "author": {
+            "login": "user-2"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-3"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-26T14:14:26Z",
+                "actor": {
+                  "login": "user-2"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 10255,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 13",
+          "url": "https://github.com/owner-1/repo-2/pull/10255",
+          "updatedAt": "2026-11-02T08:40:13Z",
+          "author": {
+            "login": "user-2"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-26T14:13:57Z",
+                "actor": {
+                  "login": "user-2"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 321,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 14",
+          "url": "https://github.com/owner-1/repo-5/pull/321",
+          "updatedAt": "2026-10-30T09:04:02Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-10-20T15:00:09Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-20T15:55:31Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-20T15:56:09Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:42Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:44Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:46Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:47Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:49Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:51Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:53Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:55Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T09:03:57Z",
+                "author": {
+                  "login": "user-6"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-30T08:47:29Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-09-29T13:26:36Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 293,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 15",
+          "url": "https://github.com/owner-1/repo-5/pull/293",
+          "updatedAt": "2026-10-29T13:34:08Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-09-09T12:40:57Z",
+                "author": {
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-7"
+                }
+              },
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-09-09T10:38:38Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-7"
+                }
+              },
+              {
+                "createdAt": "2026-09-09T10:38:38Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-09-09T14:47:58Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-29T13:34:08Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-09-09T10:38:36Z"
+              }
+            ]
+          }
+        },
+        {
+          "number": 278,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 16",
+          "url": "https://github.com/owner-1/repo-5/pull/278",
+          "updatedAt": "2026-10-29T13:33:53Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-09-09T13:35:46Z",
+                "author": {
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-08-31T07:36:20Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-09-09T15:08:44Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-29T13:33:53Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": []
+          }
+        },
+        {
+          "number": 264,
+          "state": "OPEN",
+          "isDraft": false,
+          "title": "Review inbox PR 17",
+          "url": "https://github.com/owner-1/repo-5/pull/264",
+          "updatedAt": "2026-10-29T13:33:03Z",
+          "author": {
+            "login": "user-6"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-5"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-09-09T13:37:09Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-10-20T15:22:47Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-22T09:14:18Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-22T09:14:20Z",
+                "author": {
+                  "login": "user-6"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-22T09:14:32Z",
+                "author": {
+                  "login": "user-6"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "timelineItems": {
+            "nodes": [
+              {
+                "createdAt": "2026-08-07T09:12:33Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-09-09T16:20:49Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-20T15:06:33Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              },
+              {
+                "createdAt": "2026-10-29T13:33:03Z",
+                "actor": {
+                  "login": "user-6"
+                },
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "readyEvents": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-20T15:06:29Z"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

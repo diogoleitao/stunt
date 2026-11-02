@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { AssignedPRTable } from "../../../assigned-pr-table.tsx";
 import { appStunt } from "../../../app-stunt.ts";
+import { ReviewInboxTable } from "../../../review-inbox-table.tsx";
 
 export default async function RepositoryPage({
   params,
@@ -21,14 +22,22 @@ export default async function RepositoryPage({
           {name}
         </a>
       </h1>
-      {repository === undefined ? (
-        <p className="text-muted-foreground">No Assigned PRs in {name}.</p>
-      ) : (
-        <section className="flex flex-col gap-2">
-          <h2 className="text-lg font-medium">Assigned PRs</h2>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-lg font-medium">Assigned PRs</h2>
+        {repository === undefined || repository.assignedPRs.length === 0 ? (
+          <p className="text-muted-foreground">No Assigned PRs in {name}.</p>
+        ) : (
           <AssignedPRTable prs={repository.assignedPRs} />
-        </section>
-      )}
+        )}
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-lg font-medium">Review inbox</h2>
+        {repository === undefined || repository.reviewInbox.length === 0 ? (
+          <p className="text-muted-foreground">Your Review inbox in {name} is empty.</p>
+        ) : (
+          <ReviewInboxTable prs={repository.reviewInbox} />
+        )}
+      </section>
     </div>
   );
 }

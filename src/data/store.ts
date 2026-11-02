@@ -1,14 +1,15 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ifExists, writeFileAtomically } from "../fs.ts";
-import type { AssignedPR } from "../github/assigned-prs.ts";
+import type { CheckedPRs } from "../github/prs.ts";
 
 // What the last check saw. Before the first check there is no checkedAt and
-// no Assigned PR.
-export type State = {
+// no PR.
+export type State = CheckedPRs & {
   checkedAt?: string;
-  assignedPRs: AssignedPR[];
 };
+
+const EMPTY: State = { assignedPRs: [], reviewInbox: [] };
 
 export function defaultDataDir(home: string): string {
   return path.join(home, ".local", "share", "stunt");
@@ -19,8 +20,9 @@ export function openStore(dataDir: string) {
   return {
     async load(): Promise<State> {
       const text = await ifExists(readFile(statePath, "utf8"));
-      if (text === undefined) return { assignedPRs: [] };
-      return JSON.parse(text) as State;
+      if (text === undefined) return EMPTY;
+      // A state saved before the Review inbox existed has none.
+      return { ...EMPTY, ...(JSON.parse(text) as Partial<State>) };
     },
 
     async save(state: State): Promise<void> {

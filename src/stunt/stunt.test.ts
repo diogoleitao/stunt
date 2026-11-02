@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GitHubClient } from "../github/client.ts";
 import { openStunt } from "./stunt.ts";
 // Recorded from the real query against a live account, then stripped of
-// logins, owners, repository names, and titles. The two pages were recorded
-// with a page size of 5.
+// logins, owners, repository names, and titles. The two Assigned PR pages
+// were recorded with a page size of 5. The Review inbox was recorded apart,
+// with the viewer, by a later version of the query that also asks for it.
 import assignedFull from "./fixtures/assigned-prs-full.json" with { type: "json" };
 import assignedPage1 from "./fixtures/assigned-prs-page-1.json" with { type: "json" };
 import assignedPage2 from "./fixtures/assigned-prs-page-2.json" with { type: "json" };
+import inboxFull from "./fixtures/review-inbox.json" with { type: "json" };
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 
@@ -57,6 +59,17 @@ async function writeConfig(config: unknown) {
   await writeFile(configPath(), JSON.stringify(config));
 }
 
+type Recorded = { data: object };
+
+// The recorded Review inbox, emptied, for checks about Assigned PRs alone.
+const NO_INBOX = { data: { ...inboxFull.data, inbox: { ...inboxFull.data.inbox, nodes: [] } } };
+
+// One check's response: recorded Assigned PRs and a recorded Review inbox,
+// which were recorded apart.
+function checkResponse(assigned: Recorded, inbox: Recorded = NO_INBOX) {
+  return { data: { ...assigned.data, ...inbox.data } };
+}
+
 // The recorded full response, without the PRs that were merged or closed.
 function withoutPRs(...numbers: number[]) {
   const response = structuredClone(assignedFull);
@@ -77,18 +90,51 @@ function withPR(number: number, change: (pr: RecordedPR) => void) {
   return response;
 }
 
+type RecordedInboxPR = (typeof inboxFull)["data"]["inbox"]["nodes"][number];
+
+// The recorded Review inbox, with PR `number` changed by `change`.
+function withInboxPR(number: number, change: (pr: RecordedInboxPR) => void) {
+  const response = structuredClone(inboxFull);
+  const pr = response.data.inbox.nodes.find((node) => node.number === number);
+  if (pr === undefined) throw new Error(`no recorded Review inbox PR #${number}`);
+  change(pr);
+  return response;
+}
+
+// Takes my pending Review request off a recorded Review inbox PR.
+function withoutMyRequest(pr: RecordedInboxPR) {
+  pr.reviewRequests.nodes = pr.reviewRequests.nodes.filter((node) => node.requestedReviewer.login !== "user-1");
+}
+
 // A review as GitHub's GraphQL API returns it.
 function review(login: string, state: string, submittedAt: string) {
   return { state, submittedAt, author: { login } };
 }
 
-// The Assigned PR row for PR `number` after one check returning `response`.
-async function rowOf(response: unknown, number: number) {
-  const row = (await modelOf(response)).repositories
+// A Review request event as GitHub's GraphQL API returns it.
+function requested(actor: string, reviewer: string, createdAt: string) {
+  return { createdAt, actor: { login: actor }, requestedReviewer: { __typename: "User", login: reviewer } };
+}
+
+// The Assigned PR row for PR `number` after one check returning the Assigned
+// PRs in `assigned`.
+async function rowOf(assigned: Recorded, number: number) {
+  const row = (await modelOf(checkResponse(assigned))).repositories
     .flatMap((repository) => repository.assignedPRs)
     .find((pr) => pr.number === number);
   if (row === undefined) throw new Error(`no Assigned PR row for #${number}`);
   return row;
+}
+
+// The Review inbox of `repository` after one check returning the Review inbox
+// in `inbox`.
+async function inboxOf(inbox: Recorded, repository: string) {
+  return inboxRows(await modelOf(checkResponse(assignedFull, inbox)), repository);
+}
+
+// The Review inbox rows of `repository` in `model`.
+function inboxRows(model: Awaited<ReturnType<typeof modelOf>>, repository: string) {
+  return model.repositories.find((candidate) => candidate.name === repository)?.reviewInbox ?? [];
 }
 
 // The page model after one check returning `response`.
@@ -109,6 +155,7 @@ const ALL_ASSIGNED = {
   repositories: [
     {
       name: "owner-1/repo-1",
+      reviewInbox: [],
       assignedPRs: [
         {
           number: 136,
@@ -125,6 +172,7 @@ const ALL_ASSIGNED = {
     },
     {
       name: "owner-1/repo-2",
+      reviewInbox: [],
       assignedPRs: [
         {
           number: 10420,
@@ -166,6 +214,7 @@ const ALL_ASSIGNED = {
     },
     {
       name: "owner-1/repo-3",
+      reviewInbox: [],
       assignedPRs: [
         // Assigned PRs include drafts.
         {
@@ -183,6 +232,7 @@ const ALL_ASSIGNED = {
     },
     {
       name: "owner-2/repo-4",
+      reviewInbox: [],
       assignedPRs: [
         {
           number: 28,
@@ -224,34 +274,42 @@ const ALL_ASSIGNED = {
 
 describe("a check", () => {
   it("lists every repository with an Assigned PR, and its Assigned PRs, most recently updated first", async () => {
-    const app = stunt(fakeGitHub([assignedFull]));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
 
     await app.check();
 
     expect(await app.pageModel()).toEqual(ALL_ASSIGNED);
   });
 
-  it("makes one query when the first page holds every Assigned PR", async () => {
-    const github = fakeGitHub([assignedFull]);
+  it("makes one query when the first pages hold every Assigned PR and the whole Review inbox", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)]);
 
     await stunt(github).check();
 
     expect(github.calls).toHaveLength(1);
     expect(github.calls[0].query).toContain("assignee:@me");
+    expect(github.calls[0].query).toContain("user-review-requested:@me");
   });
 
-  it("follows the next page when a page overflows", async () => {
-    const github = fakeGitHub([assignedPage1, assignedPage2]);
+  it("follows the next page of Assigned PRs alone when that page overflows", async () => {
+    const github = fakeGitHub([
+      checkResponse(assignedPage1),
+      // A follow-up query asks for the viewer and the overflowing search only.
+      checkResponse(assignedPage2, { data: { viewer: inboxFull.data.viewer } }),
+    ]);
     const app = stunt(github);
 
     await app.check();
 
-    expect(github.calls.map((call) => call.variables.after)).toEqual([null, "Y3Vyc29yOjU="]);
+    expect(github.calls.map((call) => call.variables)).toMatchObject([
+      { assigned: true, assignedAfter: null, inbox: true, inboxAfter: null },
+      { assigned: true, assignedAfter: "Y3Vyc29yOjU=", inbox: false },
+    ]);
     expect(await app.pageModel()).toEqual(ALL_ASSIGNED);
   });
 
   it("drops a PR merged or closed since the last check, and a repository left with none", async () => {
-    const app = stunt(fakeGitHub([assignedFull, withoutPRs(10412, 136)]));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull), checkResponse(withoutPRs(10412, 136))]));
 
     await app.check();
     await app.check();
@@ -271,15 +329,15 @@ describe("a check", () => {
       if (node.number === 10412) node.state = "MERGED";
       if (node.number === 136) node.state = "CLOSED";
     }
-    const app = stunt(fakeGitHub([lagging]));
+    const app = stunt(fakeGitHub([checkResponse(lagging)]));
 
     await app.check();
 
-    expect(await app.pageModel()).toEqual(await modelOf(withoutPRs(10412, 136)));
+    expect(await app.pageModel()).toEqual(await modelOf(checkResponse(withoutPRs(10412, 136))));
   });
 
   it("keeps what the last check saw across restarts", async () => {
-    await stunt(fakeGitHub([assignedFull])).check();
+    await stunt(fakeGitHub([checkResponse(assignedFull)])).check();
 
     expect(await stunt(fakeGitHub([])).pageModel()).toEqual(ALL_ASSIGNED);
   });
@@ -289,7 +347,7 @@ describe("a check", () => {
   });
 
   it("keeps the last check's PRs when a check fails", async () => {
-    const app = stunt(fakeGitHub([assignedFull]));
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
 
     await app.check();
     await expect(app.check()).rejects.toThrow("no recorded response left");
@@ -434,6 +492,225 @@ describe("an Assigned PR's Review status", () => {
   });
 });
 
+describe("the Review inbox", () => {
+  it("lists every open PR with a Review request pending for me, oldest request first", async () => {
+    expect(await inboxOf(inboxFull, "owner-1/repo-2")).toEqual([
+      {
+        number: 10255,
+        title: "Review inbox PR 13",
+        url: "https://github.com/owner-1/repo-2/pull/10255",
+        author: "user-2",
+        request: { by: "user-2", ago: "5 days ago" },
+        reRequest: false,
+      },
+      {
+        number: 10306,
+        title: "Review inbox PR 11",
+        url: "https://github.com/owner-1/repo-2/pull/10306",
+        author: "user-2",
+        request: { by: "user-2", ago: "5 days ago" },
+        reRequest: false,
+      },
+      // Requested three times; I reviewed between the first and the second.
+      {
+        number: 10404,
+        title: "Review inbox PR 5",
+        url: "https://github.com/owner-1/repo-2/pull/10404",
+        author: "user-3",
+        request: { by: "user-3", ago: "2 days ago" },
+        reRequest: true,
+      },
+      {
+        number: 10419,
+        title: "Review inbox PR 1",
+        url: "https://github.com/owner-1/repo-2/pull/10419",
+        author: "user-5",
+        request: { by: "user-5", ago: "1 day ago" },
+        reRequest: false,
+      },
+    ]);
+  });
+
+  it("ignores a Review request on a draft, and lists the PR once it is marked ready", async () => {
+    const draft = withInboxPR(10419, (pr) => {
+      pr.isDraft = true;
+    });
+    const app = stunt(fakeGitHub([checkResponse(assignedFull, draft), checkResponse(assignedFull, inboxFull)]));
+
+    await app.check();
+    expect(inboxRows(await app.pageModel(), "owner-1/repo-2").map((pr) => pr.number)).toEqual([
+      10255, 10306, 10404,
+    ]);
+
+    await app.check();
+    expect(inboxRows(await app.pageModel(), "owner-1/repo-2").map((pr) => pr.number)).toEqual([
+      10255, 10306, 10404, 10419,
+    ]);
+  });
+
+  it("orders every PR by its latest request, oldest first, marking those I reviewed before it", async () => {
+    expect(
+      (await inboxOf(inboxFull, "owner-1/repo-5")).map(({ number, reRequest }) => ({ number, reRequest })),
+    ).toEqual([
+      { number: 362, reRequest: false },
+      { number: 353, reRequest: true },
+      { number: 363, reRequest: false },
+      { number: 364, reRequest: false },
+      { number: 365, reRequest: false },
+      { number: 264, reRequest: true },
+      { number: 278, reRequest: true },
+      { number: 293, reRequest: true },
+      // Its earlier requests are gone from GitHub, but my review is not.
+      { number: 321, reRequest: true },
+      { number: 345, reRequest: false },
+      { number: 348, reRequest: true },
+      { number: 359, reRequest: false },
+    ]);
+  });
+
+  // GitHub clears my Review request when I submit a review.
+  it.each([["APPROVED"], ["CHANGES_REQUESTED"], ["COMMENTED"]])(
+    "drops a PR once I submit a review (%s)",
+    async (state) => {
+      const reviewed = withInboxPR(10419, (pr) => {
+        withoutMyRequest(pr);
+        (pr.reviews.nodes as unknown[]).push(review("user-1", state, "2026-11-01T11:00:00Z"));
+      });
+
+      expect((await inboxOf(reviewed, "owner-1/repo-2")).map((pr) => pr.number)).toEqual([10255, 10306, 10404]);
+    },
+  );
+
+  it("keeps a PR while my review of it is a pending draft", async () => {
+    const drafting = withInboxPR(10419, (pr) => {
+      (pr.reviews.nodes as unknown[]).push({ state: "PENDING", submittedAt: null, author: { login: "user-1" } });
+    });
+
+    const rows = await inboxOf(drafting, "owner-1/repo-2");
+    expect(rows.map(({ number, reRequest }) => ({ number, reRequest }))).toContainEqual({
+      number: 10419,
+      reRequest: false,
+    });
+  });
+
+  it("lists a PR again, marked as a re-request, when my review is requested again", async () => {
+    const reviewed = withInboxPR(10419, (pr) => {
+      withoutMyRequest(pr);
+      (pr.reviews.nodes as unknown[]).push(review("user-1", "COMMENTED", "2026-11-01T09:00:00Z"));
+    });
+    const reRequested = withInboxPR(10419, (pr) => {
+      (pr.reviews.nodes as unknown[]).push(review("user-1", "COMMENTED", "2026-11-01T09:00:00Z"));
+      pr.timelineItems.nodes.push(requested("user-5", "user-1", "2026-11-01T10:00:00Z"));
+    });
+    const app = stunt(
+      fakeGitHub([
+        checkResponse(assignedFull, inboxFull),
+        checkResponse(assignedFull, reviewed),
+        checkResponse(assignedFull, reRequested),
+      ]),
+    );
+
+    await app.check();
+    await app.check();
+    expect(inboxRows(await app.pageModel(), "owner-1/repo-2").map((pr) => pr.number)).not.toContain(10419);
+
+    await app.check();
+    expect(inboxRows(await app.pageModel(), "owner-1/repo-2").at(-1)).toEqual({
+      number: 10419,
+      title: "Review inbox PR 1",
+      url: "https://github.com/owner-1/repo-2/pull/10419",
+      author: "user-5",
+      request: { by: "user-5", ago: "2 hours ago" },
+      reRequest: true,
+    });
+  });
+
+  // The search index lags behind withdrawn requests.
+  it("drops a PR whose Review request was withdrawn, though the search still returns it", async () => {
+    const withdrawn = withInboxPR(10419, withoutMyRequest);
+
+    expect((await inboxOf(withdrawn, "owner-1/repo-2")).map((pr) => pr.number)).toEqual([10255, 10306, 10404]);
+  });
+
+  it("ignores a Review request made to a team of mine rather than to me", async () => {
+    const toTeam = withInboxPR(10419, (pr) => {
+      withoutMyRequest(pr);
+      (pr.reviewRequests.nodes as unknown[]).push({
+        requestedReviewer: { __typename: "Team", combinedSlug: "owner-1/team-1" },
+      });
+    });
+
+    expect((await inboxOf(toTeam, "owner-1/repo-2")).map((pr) => pr.number)).toEqual([10255, 10306, 10404]);
+  });
+
+  it("drops a PR the search still returns after it was merged or closed", async () => {
+    const lagging = structuredClone(inboxFull);
+    for (const node of lagging.data.inbox.nodes) {
+      if (node.number === 10419) node.state = "MERGED";
+      if (node.number === 10404) node.state = "CLOSED";
+    }
+
+    expect((await inboxOf(lagging, "owner-1/repo-2")).map((pr) => pr.number)).toEqual([10255, 10306]);
+  });
+
+  it("puts a repository with only Review inbox PRs in the sidebar", async () => {
+    const model = await modelOf(checkResponse(assignedFull, inboxFull));
+
+    expect(model.repositories.map((repository) => repository.name)).toEqual([
+      "owner-1/repo-1",
+      "owner-1/repo-2",
+      "owner-1/repo-3",
+      "owner-1/repo-5",
+      "owner-2/repo-4",
+    ]);
+    expect(model.repositories[3].assignedPRs).toEqual([]);
+  });
+
+  it("follows the next page of the Review inbox alone when that page overflows", async () => {
+    // The recorded Review inbox, split into a first page of 5 and the rest.
+    const page1 = structuredClone(inboxFull);
+    page1.data.inbox.nodes = inboxFull.data.inbox.nodes.slice(0, 5);
+    page1.data.inbox.pageInfo = { hasNextPage: true, endCursor: "Y3Vyc29yOjU=" };
+    const page2 = { data: { viewer: inboxFull.data.viewer, inbox: { ...inboxFull.data.inbox, nodes: inboxFull.data.inbox.nodes.slice(5) } } };
+    const github = fakeGitHub([checkResponse(assignedFull, page1), page2]);
+    const app = stunt(github);
+
+    await app.check();
+
+    expect(github.calls.map((call) => call.variables)).toMatchObject([
+      { assigned: true, assignedAfter: null, inbox: true, inboxAfter: null },
+      { assigned: false, inbox: true, inboxAfter: "Y3Vyc29yOjU=" },
+    ]);
+    expect(await app.pageModel()).toEqual(await modelOf(checkResponse(assignedFull, inboxFull)));
+  });
+
+  it("counts a request made while the PR was a draft from when the PR was marked ready", async () => {
+    const readyLater = withInboxPR(10255, (pr) => {
+      (pr.readyEvents.nodes as unknown[]).push({ createdAt: "2026-11-01T08:00:00Z" });
+    });
+
+    const rows = await inboxOf(readyLater, "owner-1/repo-2");
+    expect(rows.map((pr) => pr.number)).toEqual([10306, 10404, 10419, 10255]);
+    expect(rows[3].request).toEqual({ by: "user-2", ago: "4 hours ago" });
+  });
+
+  // The query reads the last 100 Review request events of each PR.
+  it("lists a request older than the events it reads first, with no requester or time", async () => {
+    const response = withInboxPR(10419, (pr) => {
+      pr.timelineItems.nodes = pr.timelineItems.nodes.filter((event) => event.requestedReviewer.login !== "user-1");
+    });
+
+    expect((await inboxOf(response, "owner-1/repo-2"))[0]).toEqual({
+      number: 10419,
+      title: "Review inbox PR 1",
+      url: "https://github.com/owner-1/repo-2/pull/10419",
+      author: "user-5",
+      request: null,
+      reRequest: false,
+    });
+  });
+});
+
 describe("checking on a schedule", () => {
   beforeEach(() => {
     // Only the schedule's timers are fake; file system work runs for real.
@@ -459,7 +736,7 @@ describe("checking on a schedule", () => {
   }
 
   it("checks at once, then every 60 seconds by default", async () => {
-    const github = fakeGitHub([assignedFull, assignedFull]);
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
 
     const stop = await stunt(github).start();
     await checked(github, 1);
@@ -474,7 +751,7 @@ describe("checking on a schedule", () => {
 
   it("checks at the interval set in the config", async () => {
     await writeConfig({ checkIntervalSeconds: 120 });
-    const github = fakeGitHub([assignedFull, assignedFull]);
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
 
     const stop = await stunt(github).start();
     await checked(github, 1);

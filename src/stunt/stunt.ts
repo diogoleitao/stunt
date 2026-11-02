@@ -1,7 +1,7 @@
 import { readConfig } from "../config/config.ts";
 import { openStore } from "../data/store.ts";
-import { fetchAssignedPRs } from "../github/assigned-prs.ts";
 import type { GitHubClient } from "../github/client.ts";
+import { fetchPRs } from "../github/prs.ts";
 import { type PageModel, pageModel } from "./page-model.ts";
 
 export type Clock = { now(): Date };
@@ -19,8 +19,8 @@ export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) 
   // Asks GitHub once for what changed and stores what it saw.
   async function check(): Promise<void> {
     const checkedAt = clock.now().toISOString();
-    const assignedPRs = await fetchAssignedPRs(github);
-    await store.save({ checkedAt, assignedPRs });
+    const prs = await fetchPRs(github);
+    await store.save({ checkedAt, ...prs });
   }
 
   return {

@@ -1,5 +1,5 @@
 import type { State } from "../data/store.ts";
-import type { AssignedPR, Review } from "../github/assigned-prs.ts";
+import type { AssignedPR, Review, ReviewInboxPR } from "../github/prs.ts";
 
 export type ReviewStatus = "review required" | "approved" | "changes requested";
 
@@ -30,9 +30,23 @@ const REVIEW_STATES = {
   DISMISSED: "dismissed",
 } as const satisfies Record<Review["state"], ReviewRow["state"]>;
 
+export type ReviewInboxRow = {
+  number: number;
+  title: string;
+  url: string;
+  author: string;
+  // Who requested the viewer's review, and how long it has waited. Null when
+  // the request is too old for the check to have read.
+  request: { by: string; ago: string } | null;
+  // The viewer had already reviewed the PR before this request.
+  reRequest: boolean;
+};
+
 export type RepositoryModel = {
   name: string;
   assignedPRs: AssignedPRRow[];
+  // Oldest request first.
+  reviewInbox: ReviewInboxRow[];
 };
 
 export type PageModel = {
@@ -96,39 +110,55 @@ function reviewStatus(pr: AssignedPR, reviews: Review[]): ReviewStatus {
   return "review required";
 }
 
-export function pageModel(state: State, now: Date): PageModel {
-  const byRepository = new Map<string, State["assignedPRs"]>();
-  for (const pr of state.assignedPRs) {
-    byRepository.set(pr.repository, [...(byRepository.get(pr.repository) ?? []), pr]);
-  }
+// A request too old for the check to have read is older than any other.
+function requestTime(pr: ReviewInboxPR): number {
+  return pr.request === null ? -Infinity : Date.parse(pr.request.at);
+}
 
-  const repositories = [...byRepository.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([name, prs]) => ({
-      name,
-      assignedPRs: prs
-        .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-        .map((pr) => {
-          const reviews = standingReviews(pr);
-          return {
-            number: pr.number,
-            title: pr.title,
-            url: pr.url,
-            author: pr.author,
-            draft: pr.draft,
-            reviewStatus: reviewStatus(pr, reviews),
-            updatedAgo: timeAgo(pr.updatedAt, now),
-            reviews: reviews
-              .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
-              .map((review) => ({
-                reviewer: review.author,
-                state: REVIEW_STATES[review.state],
-                submittedAgo: timeAgo(review.submittedAt, now),
-              })),
-            pendingReviewers: pr.pendingReviewers,
-          };
-        }),
-    }));
+// Every repository with an Assigned PR or a Review inbox PR.
+function repositoryNames(state: State): string[] {
+  const names = new Set([...state.assignedPRs, ...state.reviewInbox].map((pr) => pr.repository));
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+export function pageModel(state: State, now: Date): PageModel {
+  const repositories = repositoryNames(state).map((name) => ({
+    name,
+    assignedPRs: state.assignedPRs
+      .filter((pr) => pr.repository === name)
+      .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+      .map((pr) => {
+        const reviews = standingReviews(pr);
+        return {
+          number: pr.number,
+          title: pr.title,
+          url: pr.url,
+          author: pr.author,
+          draft: pr.draft,
+          reviewStatus: reviewStatus(pr, reviews),
+          updatedAgo: timeAgo(pr.updatedAt, now),
+          reviews: reviews
+            .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
+            .map((review) => ({
+              reviewer: review.author,
+              state: REVIEW_STATES[review.state],
+              submittedAgo: timeAgo(review.submittedAt, now),
+            })),
+          pendingReviewers: pr.pendingReviewers,
+        };
+      }),
+    reviewInbox: state.reviewInbox
+      .filter((pr) => pr.repository === name)
+      .toSorted((a, b) => requestTime(a) - requestTime(b))
+      .map((pr) => ({
+        number: pr.number,
+        title: pr.title,
+        url: pr.url,
+        author: pr.author,
+        request: pr.request === null ? null : { by: pr.request.by, ago: timeAgo(pr.request.at, now) },
+        reRequest: pr.reRequest,
+      })),
+  }));
 
   return { checkedAt: state.checkedAt, repositories };
 }

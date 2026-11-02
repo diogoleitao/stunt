@@ -11,7 +11,7 @@ export default async function HomePage() {
 
   return (
     <p className="text-muted-foreground">
-      {model.checkedAt === undefined ? "Waiting for the first check." : "No Assigned PRs."}
+      {model.checkedAt === undefined ? "Waiting for the first check." : "No Assigned PRs, and your Review inbox is empty."}
     </p>
   );
 }

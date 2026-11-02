@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { AssignedPRRow, ReviewRow, ReviewStatus } from "../stunt/page-model.ts";
+import { Badge } from "./badge.tsx";
 
 const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"], string> = {
   "review required": "border-border text-muted-foreground",
@@ -14,14 +15,6 @@ const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"], string> = {
   commented: "border-border text-muted-foreground",
   dismissed: "border-border text-muted-foreground line-through",
 };
-
-function Badge({ className, children }: { className?: string; children: string }) {
-  return (
-    <span className={cn("inline-flex shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-medium", className)}>
-      {children}
-    </span>
-  );
-}
 
 // A repository's Assigned PRs. Opening a row shows each reviewer's latest
 // review and who a review is still requested from.
