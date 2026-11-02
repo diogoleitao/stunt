@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { AssignedPRTable } from "../../../assigned-pr-table.tsx";
 import { appStunt } from "../../../app-stunt.ts";
 import { ReviewInboxTable } from "../../../review-inbox-table.tsx";
+import { TaskList } from "../../../task-list.tsx";
 
 export default async function RepositoryPage({
   params,
@@ -22,6 +23,14 @@ export default async function RepositoryPage({
           {name}
         </a>
       </h1>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-lg font-medium">Tasks</h2>
+        {repository === undefined || repository.tasks.length === 0 ? (
+          <p className="text-muted-foreground">No open Tasks in {name}.</p>
+        ) : (
+          <TaskList prs={repository.tasks} />
+        )}
+      </section>
       <section className="flex flex-col gap-2">
         <h2 className="text-lg font-medium">Assigned PRs</h2>
         {repository === undefined || repository.assignedPRs.length === 0 ? (

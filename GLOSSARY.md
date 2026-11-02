@@ -47,7 +47,7 @@ One piece of activity on a PR that you acknowledge by marking it done: a Review 
 _Avoid_: Notification, alert, event, to-do
 
 **Expired**:
-A Task that ended without being done, because its PR was merged or closed or its Review request was withdrawn.
+A Task that ended without being done, because its PR was merged or closed, or its Review request was withdrawn or replaced by a re-request.
 _Avoid_: Dismissed, cancelled
 
 **Notification**:
