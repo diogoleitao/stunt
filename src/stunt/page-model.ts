@@ -1,6 +1,6 @@
 import type { State } from "../data/store.ts";
 import type { AssignedPR, Review, ReviewInboxPR } from "../github/prs.ts";
-import type { Task } from "./tasks.ts";
+import { requestTime, type Task, taskActor, taskTime } from "./tasks.ts";
 
 export type ReviewStatus = "review required" | "approved" | "changes requested";
 
@@ -142,26 +142,15 @@ function reviewStatus(pr: AssignedPR, reviews: Review[]): ReviewStatus {
   return "review required";
 }
 
-// A request too old for the check to have read is older than any other.
-function requestTime({ request }: Pick<ReviewInboxPR, "request">): number {
-  return request === null ? -Infinity : Date.parse(request.waitingSince);
-}
-
-// A Review request Task counts from its request, any other from its activity.
-function taskTime(task: Task): number {
-  return task.kind === "review request" ? requestTime(task) : Date.parse(task.activity.at);
-}
-
 function taskRow(task: Task, now: Date): TaskRow {
+  const row = { id: task.id, kind: task.kind, by: taskActor(task) };
   if (task.kind !== "review request") {
-    const { by, at, url } = task.activity;
-    return { id: task.id, kind: task.kind, url, by, ago: timeAgo(at, now) };
+    const { at, url } = task.activity;
+    return { ...row, url, ago: timeAgo(at, now) };
   }
   return {
-    id: task.id,
-    kind: task.kind,
+    ...row,
     url: `${task.url}/files`,
-    by: task.request?.by ?? null,
     ago: task.request === null ? null : timeAgo(task.request.waitingSince, now),
   };
 }

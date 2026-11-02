@@ -2,8 +2,9 @@ import { readConfig } from "../config/config.ts";
 import { openStore } from "../data/store.ts";
 import type { GitHubClient } from "../github/client.ts";
 import { fetchPRs } from "../github/prs.ts";
+import { type Notification, notifications } from "./notifications.ts";
 import { type PageModel, pageModel } from "./page-model.ts";
-import { applyCheck, trackedPRs, withTasksDone } from "./tasks.ts";
+import { applyCheck, type Task, trackedPRs, withTasksDone } from "./tasks.ts";
 
 export type Clock = { now(): Date };
 
@@ -18,8 +19,8 @@ export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) 
   const store = openStore(dataDir);
 
   // Asks GitHub once for what changed, stores what it saw, and turns new
-  // activity into Tasks.
-  async function check(): Promise<void> {
+  // activity into Tasks. Resolves to the Notifications announcing them.
+  async function check(): Promise<Notification[]> {
     const checkedAt = clock.now().toISOString();
     const { tasks, baseline } = await store.load();
     const prs = await fetchPRs(github, {
@@ -27,7 +28,14 @@ export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) 
       since: baseline,
       known: new Set(tasks.map((task) => task.id)),
     });
-    await store.update((state) => applyCheck(state, prs, checkedAt));
+    let created: Task[] = [];
+    await store.update((state) => {
+      const next = applyCheck(state, prs, checkedAt);
+      const known = new Set(state.tasks.map((task) => task.id));
+      created = next.tasks.filter((task) => !known.has(task.id));
+      return next;
+    });
+    return notifications(created);
   }
 
   return {
@@ -44,18 +52,26 @@ export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) 
     },
 
     // Checks now, then once per check interval, timed from the end of the
-    // previous check so two never run at once. A failed check is logged and
-    // the next one runs on time. Resolves to a function that stops checking.
-    async start(): Promise<() => void> {
+    // previous check so two never run at once, telling `onChecked` each
+    // stored check's Notifications. A failed check, or a failure of
+    // `onChecked`, is logged and the next check runs on time. Resolves to a
+    // function that stops checking.
+    async start(onChecked: (notifications: Notification[]) => void = () => {}): Promise<() => void> {
       const { checkIntervalSeconds } = await readConfig(configPath);
       let stopped = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       const run = async () => {
+        let notifications: Notification[] | undefined;
         try {
-          await check();
+          notifications = await check();
         } catch (error) {
           console.error("stunt: check failed:", error);
+        }
+        try {
+          if (notifications !== undefined) onChecked(notifications);
+        } catch (error) {
+          console.error("stunt: telling a check's Notifications failed:", error);
         }
         if (!stopped) timer = setTimeout(run, checkIntervalSeconds * 1000);
       };

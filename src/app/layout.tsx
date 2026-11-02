@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { appStunt } from "./app-stunt.ts";
+import { LiveUpdates } from "./live-updates.tsx";
 import { RepositoryNav } from "./repository-nav.tsx";
 import "./globals.css";
 
@@ -25,7 +26,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 <Link href="/" className="font-semibold tracking-tight">
                   stunt
                 </Link>
-                <ThemeToggle />
+                <div className="flex items-center">
+                  <LiveUpdates />
+                  <ThemeToggle />
+                </div>
               </div>
               <RepositoryNav
                 repositories={model.repositories.map(({ name, counts }) => ({ name, counts }))}

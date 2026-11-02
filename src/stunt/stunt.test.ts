@@ -175,6 +175,13 @@ function inboxWithout(...numbers: number[]) {
   return response;
 }
 
+// The recorded Review inbox, holding only PRs `numbers`.
+function inboxHolding(...numbers: number[]) {
+  const response = structuredClone(inboxFull);
+  response.data.inbox.nodes = response.data.inbox.nodes.filter((node) => numbers.includes(node.number));
+  return response;
+}
+
 // Takes my pending Review request off a recorded Review inbox PR.
 function withoutMyRequest(pr: RecordedInboxPR) {
   pr.reviewRequests.nodes = pr.reviewRequests.nodes.filter((node) => node.requestedReviewer.login !== "user-1");
@@ -1492,6 +1499,105 @@ describe("the All Tasks view", () => {
   });
 });
 
+describe("Notifications", () => {
+  it("announces a check's new Tasks, one per repository per Task kind, listing each Task's PR and who acted, oldest first", async () => {
+    // A review of mine on #25 becomes user-2's reply, and my comment on #10420
+    // becomes user-2's.
+    const response = withPR(25, (pr) => {
+      pr.reviews.nodes[1].author = { login: "user-2", __typename: "User" };
+    });
+    const pr10420 = response.data.assigned.nodes.find((node) => node.number === 10420)!;
+    pr10420.comments.nodes[0].author = { __typename: "User", login: "user-2" };
+    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
+
+    const notifications = await stunt(
+      fakeGitHub([checkResponse(response, inboxHolding(10419, 10404, 368))]),
+      LATER,
+    ).check();
+
+    expect(notifications).toEqual([
+      {
+        repository: "owner-1/repo-2",
+        kind: "review request",
+        title: "owner-1/repo-2: 2 new Review requests",
+        body: "#10404 by user-3\n#10419 by user-5",
+      },
+      {
+        repository: "owner-1/repo-2",
+        kind: "review",
+        title: "owner-1/repo-2: 1 new review",
+        body: "#10420 by user-2",
+      },
+      {
+        repository: "owner-1/repo-2",
+        kind: "comment",
+        title: "owner-1/repo-2: 1 new comment",
+        body: "#10420 by user-2",
+      },
+      {
+        repository: "owner-1/repo-3",
+        kind: "review request",
+        title: "owner-1/repo-3: 1 new Review request",
+        body: "#368 by user-2",
+      },
+      {
+        repository: "owner-2/repo-4",
+        kind: "review",
+        title: "owner-2/repo-4: 4 new reviews",
+        body: "#25 by user-2\n#25 by user-2\n#27 by user-2\n#28 by user-2",
+      },
+      {
+        repository: "owner-2/repo-4",
+        kind: "reply",
+        title: "owner-2/repo-4: 1 new reply",
+        body: "#25 by user-2",
+      },
+    ]);
+  });
+
+  // Notifications reach only the tabs open when they are made, so a Task
+  // made while no tab was open is never announced.
+  it("announces each Task only at the check that makes it, across checks and restarts", async () => {
+    const inbox = inboxHolding(368);
+    const first = await stunt(fakeGitHub([checkResponse(assignedFull, inbox)]), BASELINE).check();
+    const app = stunt(fakeGitHub([checkResponse(assignedFull, inbox), checkResponse(assignedFull, inbox)]), LATER);
+
+    const later = await app.check();
+    const latest = await app.check();
+
+    expect(first).toEqual([
+      {
+        repository: "owner-1/repo-3",
+        kind: "review request",
+        title: "owner-1/repo-3: 1 new Review request",
+        body: "#368 by user-2",
+      },
+    ]);
+    expect(later.map((notification) => notification.title)).toEqual([
+      "owner-1/repo-2: 1 new review",
+      "owner-2/repo-4: 4 new reviews",
+    ]);
+    expect(latest).toEqual([]);
+  });
+
+  it("names no one for a request too old for the check to have read", async () => {
+    const inbox = inboxHolding(10419);
+    const pr = inbox.data.inbox.nodes[0];
+    pr.timelineItems.nodes = pr.timelineItems.nodes.filter((event) => event.requestedReviewer.login !== "user-1");
+
+    const notifications = await stunt(fakeGitHub([checkResponse(assignedFull, inbox)])).check();
+
+    expect(notifications).toEqual([
+      {
+        repository: "owner-1/repo-2",
+        kind: "review request",
+        title: "owner-1/repo-2: 1 new Review request",
+        body: "#10419",
+      },
+    ]);
+  });
+});
+
 describe("checking on a schedule", () => {
   beforeEach(() => {
     // Only the schedule's timers are fake; file system work runs for real.
@@ -1541,6 +1647,29 @@ describe("checking on a schedule", () => {
     await vi.advanceTimersByTimeAsync(1);
     await checked(github, 2);
 
+    stop();
+  });
+
+  it("tells the listener each check's Notifications, once the check is stored", async () => {
+    const inbox = inboxHolding(368);
+    const github = fakeGitHub([checkResponse(NO_ASSIGNED, inbox), checkResponse(NO_ASSIGNED, inbox)]);
+    const app = stunt(github);
+    const heard: { titles: string[]; tasks: number }[] = [];
+
+    const stop = await app.start(async (notifications) => {
+      const model = await app.pageModel();
+      heard.push({ titles: notifications.map((notification) => notification.title), tasks: model.allTasks.length });
+    });
+    await checked(github, 1);
+    await until(() => heard.length === 1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await checked(github, 2);
+    await until(() => heard.length === 2);
+
+    expect(heard).toEqual([
+      { titles: ["owner-1/repo-3: 1 new Review request"], tasks: 1 },
+      { titles: [], tasks: 1 },
+    ]);
     stop();
   });
 

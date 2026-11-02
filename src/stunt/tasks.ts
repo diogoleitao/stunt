@@ -20,6 +20,22 @@ export type Task = {
   | { kind: Activity["kind"]; activity: Pick<Activity, "by" | "at" | "url"> }
 );
 
+// A request too old for the check to have read is older than any other.
+export function requestTime({ request }: Pick<ReviewInboxPR, "request">): number {
+  return request === null ? -Infinity : Date.parse(request.waitingSince);
+}
+
+// A Review request Task counts from its request, any other from its activity.
+export function taskTime(task: Task): number {
+  return task.kind === "review request" ? requestTime(task) : Date.parse(task.activity.at);
+}
+
+// Who made a Review request Task's request or posted any other Task's
+// activity. Null when a request is too old for the check to have read.
+export function taskActor(task: Task): string | null {
+  return task.kind === "review request" ? (task.request?.by ?? null) : task.activity.by;
+}
+
 function prKey({ repository, number }: PRRef): string {
   return `${repository}#${number}`;
 }
