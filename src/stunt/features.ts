@@ -1,9 +1,11 @@
+import type { Dirent } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { cloneKey } from "../clones/clones.ts";
 import { ifExists } from "../fs.ts";
 import type { GitHubClient } from "../github/client.ts";
 import type { CheckedPRs, PRRef } from "../github/prs.ts";
+import { fetchScratchTrees, type ScratchTree } from "../github/scratch.ts";
 import { fetchTickets, ticketKey } from "../github/tickets.ts";
 import type { IssueTracker } from "./issue-trackers.ts";
 
@@ -20,22 +22,33 @@ const TICKET = /^(\d+)-.*\.md$/;
 // `Stacked on #N` or `Shipped in PR #N`, does not link.
 const PR_LINE = /^\*\*PR:\*\*\s+#(\d+)\b/gm;
 
-// The names of the directories in `dir`, hidden ones left out, in name order.
-async function directories(dir: string): Promise<string[]> {
-  const entries = (await ifExists(readdir(dir, { withFileTypes: true }))) ?? [];
-  return entries
-    .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
-    .map((entry) => entry.name)
-    .sort();
+// Whether `slug`, a directory in `.scratch`, is a Feature: a hidden one is
+// not.
+function isFeature(slug: string): boolean {
+  return !slug.startsWith(".");
 }
 
-// The Tickets in `dir`, in Ticket number order.
-async function tickets(dir: string): Promise<string[]> {
-  const entries = (await ifExists(readdir(dir, { withFileTypes: true }))) ?? [];
-  return entries
-    .filter((entry) => entry.isFile() && TICKET.test(entry.name))
-    .map((entry) => entry.name)
-    .sort((a, b) => Number(TICKET.exec(a)?.[1]) - Number(TICKET.exec(b)?.[1]) || a.localeCompare(b));
+// The names of the entries in `dir` that `wanted` keeps.
+async function names(dir: string, wanted: (entry: Dirent) => boolean): Promise<string[]> {
+  const found = (await ifExists(readdir(dir, { withFileTypes: true }))) ?? [];
+  return found.filter(wanted).map((entry) => entry.name);
+}
+
+// The `.scratch` tree in the working tree of the Local Markdown clone at
+// `clone`, its Features holding only their Tickets.
+async function readScratchTree(clone: string): Promise<ScratchTree> {
+  const scratch = path.join(clone, ".scratch");
+  const tree: ScratchTree = new Map();
+  for (const featureSlug of await names(scratch, (entry) => entry.isDirectory() && isFeature(entry.name))) {
+    const issues = path.join(scratch, featureSlug, "issues");
+    const texts = new Map<string, string>();
+    for (const file of await names(issues, (entry) => entry.isFile() && TICKET.test(entry.name))) {
+      const text = await ifExists(readFile(path.join(issues, file), "utf8"));
+      if (text !== undefined) texts.set(file, text);
+    }
+    tree.set(featureSlug, texts);
+  }
+  return tree;
 }
 
 // A Feature's name from its slug: hyphens as spaces, first letter capital.
@@ -44,20 +57,23 @@ function featureName(slug: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// The PRs the Tickets in the `.scratch` tree of the Local Markdown clone at
-// `clone` link, in Feature slug order, then Ticket number order, then the
-// order of a Ticket's PR lines, which is their Ticket order. Features are
-// `.scratch/<feature-slug>/` and Tickets are
+// The PRs the Tickets in the `.scratch` tree `tree` link, in Feature slug
+// order, then Ticket number order, then the order of a Ticket's PR lines,
+// which is their Ticket order. Features are `.scratch/<feature-slug>/`,
+// hidden ones left out, and Tickets are
 // `.scratch/<feature-slug>/issues/NN-<slug>.md`. A PR two Tickets link stays
 // with the first.
-async function readTicketLinks(clone: string): Promise<FeatureLink[]> {
-  const scratch = path.join(clone, ".scratch");
+function ticketLinks(tree: ScratchTree): FeatureLink[] {
   const links = new Map<number, FeatureLink>();
-  for (const featureSlug of await directories(scratch)) {
-    const issues = path.join(scratch, featureSlug, "issues");
-    for (const ticket of await tickets(issues)) {
-      const text = await ifExists(readFile(path.join(issues, ticket), "utf8"));
-      for (const [, pr] of text?.matchAll(PR_LINE) ?? []) {
+  const features = [...tree]
+    .filter(([slug]) => isFeature(slug))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const [featureSlug, texts] of features) {
+    const tickets = [...texts.keys()]
+      .filter((file) => TICKET.test(file))
+      .sort((a, b) => Number(TICKET.exec(a)?.[1]) - Number(TICKET.exec(b)?.[1]) || a.localeCompare(b));
+    for (const ticket of tickets) {
+      for (const [, pr] of texts.get(ticket)?.matchAll(PR_LINE) ?? []) {
         const number = Number(pr);
         if (links.has(number)) continue;
         links.set(number, {
@@ -106,25 +122,35 @@ async function readIssueLinks(
   return Object.fromEntries(Object.entries(links).map(([repository, byPR]) => [repository, [...byPR.values()]]));
 }
 
+// The repositories in `issueTrackers` whose Issue tracker is `tracker`.
+function trackedBy(issueTrackers: Record<string, IssueTracker>, tracker: IssueTracker): string[] {
+  return Object.entries(issueTrackers).flatMap(([repository, declared]) => (declared === tracker ? [repository] : []));
+}
+
 // The links of the PRs in `prs` to Features, by repository. In each Local
-// Markdown repository, only Assigned PRs are linked, read from its clone
-// among `clones`; one without a clone links none, so its PRs stay Unfiled.
-// In each GitHub repository, Assigned PRs and Review inbox PRs are linked.
+// Markdown repository with an Assigned PR, only Assigned PRs are linked,
+// read from the working tree of its clone among `clones`, so Tickets kept
+// out of git still link, and from its GitHub default branch only when it has
+// no clone, asking GitHub for every such repository in one query. In each
+// GitHub repository, Assigned PRs and Review inbox PRs are linked.
 export async function readFeatureLinks(
   github: GitHubClient,
   prs: CheckedPRs,
   issueTrackers: Record<string, IssueTracker>,
   clones: Map<string, string>,
 ): Promise<Record<string, FeatureLink[]>> {
-  const links: Record<string, FeatureLink[]> = {};
-  for (const [repository, tracker] of Object.entries(issueTrackers)) {
-    const clone = clones.get(cloneKey(repository));
-    if (tracker !== "Local Markdown" || clone === undefined) continue;
-    const assigned = new Set(prs.assignedPRs.filter((pr) => pr.repository === repository).map((pr) => pr.number));
-    links[repository] = (await readTicketLinks(clone)).filter((link) => assigned.has(link.number));
-  }
-  const githubRepositories = Object.entries(issueTrackers).flatMap(([repository, tracker]) =>
-    tracker === "GitHub" ? [repository] : [],
+  const localMarkdown = trackedBy(issueTrackers, "Local Markdown").filter((repository) =>
+    prs.assignedPRs.some((pr) => pr.repository === repository),
   );
-  return { ...links, ...(await readIssueLinks(github, prs, githubRepositories)) };
+  const withoutClone = localMarkdown.filter((repository) => !clones.has(cloneKey(repository)));
+  const fetched = await fetchScratchTrees(github, withoutClone);
+  const links: Record<string, FeatureLink[]> = {};
+  for (const repository of localMarkdown) {
+    const clone = clones.get(cloneKey(repository));
+    const tree = clone === undefined ? fetched.get(repository) : await readScratchTree(clone);
+    if (tree === undefined) continue;
+    const assigned = new Set(prs.assignedPRs.filter((pr) => pr.repository === repository).map((pr) => pr.number));
+    links[repository] = ticketLinks(tree).filter((link) => assigned.has(link.number));
+  }
+  return { ...links, ...(await readIssueLinks(github, prs, trackedBy(issueTrackers, "GitHub"))) };
 }

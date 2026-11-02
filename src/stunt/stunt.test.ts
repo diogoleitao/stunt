@@ -22,6 +22,10 @@ import declarationsFull from "./fixtures/declarations.json" with { type: "json" 
 // Recorded and stripped the same way, by the query for the Tickets PR bodies
 // name: one with a parent, one without, and one GitHub does not find.
 import ticketsFull from "./fixtures/tickets.json" with { type: "json" };
+// Recorded and stripped the same way, by the query for the `.scratch` tree on
+// the default branch of a Local Markdown repository whose Tickets link PRs
+// #25 and #27, of one with no `.scratch`, and of one GitHub does not find.
+import scratchFull from "./fixtures/scratch.json" with { type: "json" };
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 
@@ -57,6 +61,17 @@ type Ticket = (typeof ticketsFull)["data"]["ticket0" | "ticket1"]["issue"] | "no
 const PARENTED: Ticket = ticketsFull.data.ticket0.issue;
 const PARENTLESS: Ticket = ticketsFull.data.ticket1.issue;
 
+// A repository's answer to the query for its `.scratch` tree.
+type ScratchTree = (typeof scratchFull)["data"]["repository0" | "repository1"] | "not found";
+
+// The recorded answer of a repository whose `.scratch` tree on its default
+// branch holds Features `cart-pending-changes`, with Tickets
+// `01-reconcile.md` linking #25 and `02-registry.md` linking #27, and
+// `oci-braintree`, whose one Ticket links none; and of one with no
+// `.scratch`.
+const SCRATCHED = scratchFull.data.repository0;
+const UNSCRATCHED = scratchFull.data.repository1;
+
 // The recorded check responses predate the query reading PR bodies, so each
 // PR in `data` gets an empty body unless a test gives it one.
 function withBodies(data: Record<string, unknown>) {
@@ -74,22 +89,43 @@ function withBodies(data: Record<string, unknown>) {
 // `declarations`, by repository, a repository left out having none; those
 // queries are kept apart in `declarationCalls`. A query for the Tickets PR
 // bodies name is answered from `tickets`, by `owner/repo#N`; those queries are
-// kept apart in `ticketCalls`.
+// kept apart in `ticketCalls`. A query for `.scratch` trees on default
+// branches is answered from `scratchTrees`, by repository, a repository left
+// out having none; those queries are kept apart in `scratchCalls`.
 function fakeGitHub(
   responses: Response[],
   replies = repliesFull,
   declarations: Record<string, Declaration> = {},
   tickets: Record<string, Ticket> = {},
-): GitHubClient & { calls: GraphQLCall[]; declarationCalls: GraphQLCall[]; ticketCalls: GraphQLCall[] } {
+  scratchTrees: Record<string, ScratchTree> = {},
+): GitHubClient & {
+  calls: GraphQLCall[];
+  declarationCalls: GraphQLCall[];
+  ticketCalls: GraphQLCall[];
+  scratchCalls: GraphQLCall[];
+} {
   const queue = [...responses];
   const calls: GraphQLCall[] = [];
   const declarationCalls: GraphQLCall[] = [];
   const ticketCalls: GraphQLCall[] = [];
+  const scratchCalls: GraphQLCall[] = [];
   return {
     calls,
     declarationCalls,
     ticketCalls,
+    scratchCalls,
     async graphql(query, variables) {
+      if (query.startsWith("query Scratch")) {
+        scratchCalls.push({ query, variables });
+        const data: Record<string, unknown> = {};
+        const errors: unknown[] = [];
+        for (let i = 0; `owner${i}` in variables; i++) {
+          const tree = scratchTrees[`${variables[`owner${i}`]}/${variables[`name${i}`]}`] ?? UNSCRATCHED;
+          data[`repository${i}`] = tree === NOT_FOUND ? null : tree;
+          if (tree === NOT_FOUND) errors.push({ ...scratchFull.errors[0], path: [`repository${i}`] });
+        }
+        return structuredClone(errors.length === 0 ? { data } : { data, errors });
+      }
       if (query.startsWith("query Tickets")) {
         ticketCalls.push({ query, variables });
         const data: Record<string, unknown> = {};
@@ -2015,21 +2051,147 @@ describe("Feature grouping in a Local Markdown repository", () => {
     ]);
   });
 
-  it("leaves every Assigned PR Unfiled in a Local Markdown repository without a clone, and in a GitHub repository's clone", async () => {
+  it("leaves every Assigned PR Unfiled in a GitHub repository's clone, though a Ticket links its PR", async () => {
     const at = path.join(home(), "repos", "owner-2", "repo-4");
     await clone(at, "git@github.com:owner-2/repo-4.git", DECLARED.object.text);
     await scratch(at, "cart-pending-changes/issues/01-reconcile.md", ticket("01. Reconcile", 25));
-    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, {
-      "owner-1/repo-2": { object: { text: LOCAL_MARKDOWN } },
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    const model = await app.pageModel();
+    expect(issueTrackers(model)).toMatchObject({ "owner-2/repo-4": "GitHub" });
+    expect(groupsOf(model, "owner-2/repo-4")).toEqual([{ feature: null, prs: rows("owner-2/repo-4", 28, 27, 25) }]);
+  });
+});
+
+describe("Feature grouping in a Local Markdown repository without a clone", () => {
+  // owner-2/repo-4 has no clone and declares Local Markdown on its default
+  // branch.
+  const LOCAL_MARKDOWN_TRACKER = {
+    "owner-2/repo-4": { object: { text: "# Issue tracker: Local Markdown\n\nIssues and specs live in `.scratch/`.\n" } },
+  };
+
+  it("groups an Assigned PR under the Feature whose Ticket on the default branch links it, named after it, in Ticket order, Unfiled last", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER, {}, {
+      "owner-2/repo-4": SCRATCHED,
     });
     const app = stunt(github);
 
     await app.check();
 
+    // #28 is named only by `notes.md`, a file in `issues` that is not a
+    // Ticket.
+    expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
+      { feature: null, prs: rows("owner-2/repo-4", 28) },
+    ]);
+  });
+
+  it("orders Features by their most recently updated PR", async () => {
+    const tree = structuredClone(SCRATCHED);
+    // The recorded oci-braintree Ticket links no PR; here it links #28, which
+    // was updated after #25 and #27.
+    const ociTicket = tree.object.entries
+      .find((entry) => entry.name === "oci-braintree")
+      ?.object.entries?.find((entry) => entry.name === "issues")
+      ?.object.entries?.find((entry) => entry.name === "01-skip-stripe-steps.md");
+    if (ociTicket === undefined) throw new Error("no recorded oci-braintree Ticket");
+    ociTicket.object.text += "\n**PR:** #28\n";
+    const app = stunt(
+      fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER, {}, { "owner-2/repo-4": tree }),
+    );
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
+      { feature: "Oci braintree", prs: rows("owner-2/repo-4", 28) },
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
+    ]);
+  });
+
+  it.each([
+    ["has no .scratch on its default branch", UNSCRATCHED],
+    ["is one GitHub does not find", NOT_FOUND],
+  ] as const)("leaves every Assigned PR Unfiled in a repository that %s", async (_, tree) => {
+    const app = stunt(
+      fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER, {}, { "owner-2/repo-4": tree }),
+    );
+
+    await app.check();
+
     const model = await app.pageModel();
-    expect(issueTrackers(model)).toMatchObject({ "owner-1/repo-2": "Local Markdown", "owner-2/repo-4": "GitHub" });
-    expect(groupsOf(model, "owner-1/repo-2")).toEqual([{ feature: null, prs: rows("owner-1/repo-2", 10420, 10412, 9968) }]);
+    expect(issueTrackers(model)).toMatchObject({ "owner-2/repo-4": "Local Markdown" });
     expect(groupsOf(model, "owner-2/repo-4")).toEqual([{ feature: null, prs: rows("owner-2/repo-4", 28, 27, 25) }]);
+  });
+
+  it("reads every Local Markdown repository without a clone in one query, and one with a clone only from its working tree", async () => {
+    // owner-1/repo-2 has a clone whose working tree links #10420; its default
+    // branch, here, links #25 and #27, which are not its PRs.
+    const at = path.join(home(), "repos", "owner-1", "repo-2");
+    await clone(at, "git@github.com:owner-1/repo-2.git", LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"].object.text);
+    await scratch(at, "oci-braintree/issues/01-skip-stripe-steps.md", "# 01. Skip Stripe steps\n\n**PR:** #10420\n");
+    const github = fakeGitHub(
+      [checkResponse(assignedFull)],
+      repliesFull,
+      { ...LOCAL_MARKDOWN_TRACKER, "owner-1/repo-3": LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"] },
+      {},
+      { "owner-2/repo-4": SCRATCHED, "owner-1/repo-2": SCRATCHED },
+    );
+    const app = stunt(github);
+
+    await app.check();
+
+    const model = await app.pageModel();
+    expect(groupsOf(model, "owner-1/repo-2")).toEqual([
+      { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
+      { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+    ]);
+    expect(groupsOf(model, "owner-2/repo-4")?.[0]).toEqual({
+      feature: "Cart pending changes",
+      prs: rows("owner-2/repo-4", 25, 27),
+    });
+    expect(github.scratchCalls).toHaveLength(1);
+    const { variables } = github.scratchCalls[0];
+    const asked = Object.keys(variables)
+      .filter((key) => key.startsWith("owner"))
+      .map((key) => `${variables[key]}/${variables[key.replace("owner", "name")]}`);
+    expect(asked.toSorted()).toEqual(["owner-1/repo-3", "owner-2/repo-4"]);
+  });
+
+  it("asks GitHub for no .scratch tree when every Local Markdown repository has a clone", async () => {
+    await clone(
+      path.join(home(), "repos", "owner-2", "repo-4"),
+      "git@github.com:owner-2/repo-4.git",
+      LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"].object.text,
+    );
+    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, { "owner-1/repo-2": DECLARED });
+
+    await stunt(github).check();
+
+    expect(github.scratchCalls).toEqual([]);
+  });
+
+  it("asks GitHub for no .scratch tree of a repository with only Review inbox PRs", async () => {
+    // owner-1/repo-5 has Review inbox PRs and no Assigned PR.
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], repliesFull, {
+      "owner-1/repo-5": LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"],
+    });
+
+    await stunt(github).check();
+
+    expect(github.scratchCalls).toEqual([]);
+  });
+
+  it("fails a check on any other GitHub error reading a .scratch tree", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER);
+    const answer = github.graphql;
+    github.graphql = async (query, variables) => {
+      if (query.startsWith("query Scratch")) return { errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] };
+      return answer(query, variables);
+    };
+
+    await expect(stunt(github).check()).rejects.toThrow("API rate limit exceeded");
   });
 });
 

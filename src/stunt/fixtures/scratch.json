@@ -1,0 +1,85 @@
+{
+  "data": {
+    "repository0": {
+      "object": {
+        "entries": [
+          {
+            "name": "cart-pending-changes",
+            "object": {
+              "entries": [
+                {
+                  "name": "issues",
+                  "object": {
+                    "entries": [
+                      {
+                        "name": "01-reconcile.md",
+                        "object": {
+                          "text": "# 01. Reconcile\n\n**PR:** #25\n"
+                        }
+                      },
+                      {
+                        "name": "02-registry.md",
+                        "object": {
+                          "text": "# 02. Registry\n\nStacked on #25\n\n**PR:** #27\n"
+                        }
+                      },
+                      {
+                        "name": "notes.md",
+                        "object": {
+                          "text": "**PR:** #28\n"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "name": "spec.md",
+                  "object": {}
+                }
+              ]
+            }
+          },
+          {
+            "name": "oci-braintree",
+            "object": {
+              "entries": [
+                {
+                  "name": "issues",
+                  "object": {
+                    "entries": [
+                      {
+                        "name": "01-skip-stripe-steps.md",
+                        "object": {
+                          "text": "# 01. Skip Stripe steps\n\nNo PR yet.\n"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "repository1": {
+      "object": null
+    },
+    "repository2": null
+  },
+  "errors": [
+    {
+      "type": "NOT_FOUND",
+      "path": [
+        "repository2"
+      ],
+      "locations": [
+        {
+          "line": 8,
+          "column": 3
+        }
+      ],
+      "message": "Could not resolve to a Repository with the name 'owner-1/repo-6'."
+    }
+  ]
+}
