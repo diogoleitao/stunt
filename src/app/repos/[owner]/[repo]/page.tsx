@@ -1,5 +1,5 @@
 import { connection } from "next/server";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AssignedPRTable } from "../../../assigned-pr-table.tsx";
 import { appStunt } from "../../../app-stunt.ts";
 
 export default async function RepositoryPage({
@@ -26,30 +26,7 @@ export default async function RepositoryPage({
       ) : (
         <section className="flex flex-col gap-2">
           <h2 className="text-lg font-medium">Assigned PRs</h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-20">PR</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Author</TableHead>
-                <TableHead className="text-right">Updated</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {repository.assignedPRs.map((pr) => (
-                <TableRow key={pr.number}>
-                  <TableCell className="text-muted-foreground tabular-nums">#{pr.number}</TableCell>
-                  <TableCell className="max-w-0 w-full truncate">
-                    <a href={pr.url} target="_blank" rel="noreferrer" className="font-medium hover:underline">
-                      {pr.title}
-                    </a>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{pr.author}</TableCell>
-                  <TableCell className="text-right text-muted-foreground">{pr.updatedAgo}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <AssignedPRTable prs={repository.assignedPRs} />
         </section>
       )}
     </div>

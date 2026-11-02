@@ -9,6 +9,7 @@
         {
           "number": 381,
           "state": "OPEN",
+          "isDraft": true,
           "title": "Assigned PR 5",
           "url": "https://github.com/owner-1/repo-3/pull/381",
           "updatedAt": "2026-10-26T15:56:29Z",
@@ -17,11 +18,19 @@
           },
           "repository": {
             "nameWithOwner": "owner-1/repo-3"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": []
           }
         },
         {
           "number": 9968,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 4",
           "url": "https://github.com/owner-1/repo-2/pull/9968",
           "updatedAt": "2026-10-16T14:23:42Z",
@@ -30,11 +39,34 @@
           },
           "repository": {
             "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "APPROVED",
+                "submittedAt": "2026-09-08T12:40:50Z",
+                "author": {
+                  "login": "user-3"
+                }
+              },
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-09-08T12:58:31Z",
+                "author": {
+                  "login": "user-2"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": []
           }
         },
         {
           "number": 136,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 1",
           "url": "https://github.com/owner-1/repo-1/pull/136",
           "updatedAt": "2026-10-16T14:23:50Z",
@@ -43,6 +75,21 @@
           },
           "repository": {
             "nameWithOwner": "owner-1/repo-1"
+          },
+          "reviewDecision": "CHANGES_REQUESTED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "CHANGES_REQUESTED",
+                "submittedAt": "2026-08-19T09:35:48Z",
+                "author": {
+                  "login": "user-2"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": []
           }
         }
       ]

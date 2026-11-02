@@ -9,6 +9,7 @@
         {
           "number": 28,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 8",
           "url": "https://github.com/owner-2/repo-4/pull/28",
           "updatedAt": "2026-10-31T17:18:35Z",
@@ -17,11 +18,26 @@
           },
           "repository": {
             "nameWithOwner": "owner-2/repo-4"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-2"
+                }
+              }
+            ]
           }
         },
         {
           "number": 27,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 7",
           "url": "https://github.com/owner-2/repo-4/pull/27",
           "updatedAt": "2026-10-31T16:47:06Z",
@@ -30,11 +46,26 @@
           },
           "repository": {
             "nameWithOwner": "owner-2/repo-4"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": []
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-2"
+                }
+              }
+            ]
           }
         },
         {
           "number": 25,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 6",
           "url": "https://github.com/owner-2/repo-4/pull/25",
           "updatedAt": "2026-10-31T15:55:40Z",
@@ -43,11 +74,48 @@
           },
           "repository": {
             "nameWithOwner": "owner-2/repo-4"
+          },
+          "reviewDecision": "REVIEW_REQUIRED",
+          "reviews": {
+            "nodes": [
+              {
+                "state": "APPROVED",
+                "submittedAt": "2026-10-31T14:04:37Z",
+                "author": {
+                  "login": "user-2"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-31T15:55:36Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-31T15:55:38Z",
+                "author": {
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-2"
+                }
+              }
+            ]
           }
         },
         {
           "number": 10420,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 3",
           "url": "https://github.com/owner-1/repo-2/pull/10420",
           "updatedAt": "2026-10-30T17:15:20Z",
@@ -56,11 +124,27 @@
           },
           "repository": {
             "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": [
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-30T17:15:20Z",
+                "author": {
+                  "login": "user-2"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": []
           }
         },
         {
           "number": 10412,
           "state": "OPEN",
+          "isDraft": false,
           "title": "Assigned PR 2",
           "url": "https://github.com/owner-1/repo-2/pull/10412",
           "updatedAt": "2026-10-29T15:32:37Z",
@@ -69,6 +153,119 @@
           },
           "repository": {
             "nameWithOwner": "owner-1/repo-2"
+          },
+          "reviewDecision": null,
+          "reviews": {
+            "nodes": [
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:32:45Z",
+                "author": {
+                  "login": "user-2"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:52:11Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:52:13Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:52:15Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:52:17Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:52:19Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T11:52:21Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:01:22Z",
+                "author": {
+                  "login": "user-2"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:13:27Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:13:30Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:23:16Z",
+                "author": {
+                  "login": "user-2"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:32:29Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:32:31Z",
+                "author": {
+                  "login": "user-1"
+                }
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-10-29T15:32:34Z",
+                "author": {
+                  "login": "user-1"
+                }
+              }
+            ]
+          },
+          "reviewRequests": {
+            "nodes": [
+              {
+                "requestedReviewer": {
+                  "__typename": "User",
+                  "login": "user-2"
+                }
+              }
+            ]
           }
         }
       ]

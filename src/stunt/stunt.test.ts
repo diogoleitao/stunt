@@ -66,6 +66,31 @@ function withoutPRs(...numbers: number[]) {
   return response;
 }
 
+type RecordedPR = (typeof assignedFull)["data"]["assigned"]["nodes"][number];
+
+// The recorded full response, with PR `number` changed by `change`.
+function withPR(number: number, change: (pr: RecordedPR) => void) {
+  const response = structuredClone(assignedFull);
+  const pr = response.data.assigned.nodes.find((node) => node.number === number);
+  if (pr === undefined) throw new Error(`no recorded PR #${number}`);
+  change(pr);
+  return response;
+}
+
+// A review as GitHub's GraphQL API returns it.
+function review(login: string, state: string, submittedAt: string) {
+  return { state, submittedAt, author: { login } };
+}
+
+// The Assigned PR row for PR `number` after one check returning `response`.
+async function rowOf(response: unknown, number: number) {
+  const row = (await modelOf(response)).repositories
+    .flatMap((repository) => repository.assignedPRs)
+    .find((pr) => pr.number === number);
+  if (row === undefined) throw new Error(`no Assigned PR row for #${number}`);
+  return row;
+}
+
 // The page model after one check returning `response`.
 async function modelOf(response: unknown) {
   const reference = openStunt({
@@ -90,7 +115,11 @@ const ALL_ASSIGNED = {
           title: "Assigned PR 1",
           url: "https://github.com/owner-1/repo-1/pull/136",
           author: "user-1",
+          draft: false,
+          reviewStatus: "changes requested",
           updatedAgo: "15 days ago",
+          reviews: [{ reviewer: "user-2", state: "changes requested", submittedAgo: "2 months ago" }],
+          pendingReviewers:[],
         },
       ],
     },
@@ -102,34 +131,53 @@ const ALL_ASSIGNED = {
           title: "Assigned PR 3",
           url: "https://github.com/owner-1/repo-2/pull/10420",
           author: "user-1",
+          draft: false,
+          reviewStatus: "review required",
           updatedAgo: "1 day ago",
+          reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "1 day ago" }],
+          pendingReviewers:[],
         },
         {
           number: 10412,
           title: "Assigned PR 2",
           url: "https://github.com/owner-1/repo-2/pull/10412",
           author: "user-1",
+          draft: false,
+          reviewStatus: "review required",
           updatedAgo: "2 days ago",
+          reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "2 days ago" }],
+          pendingReviewers:["user-2"],
         },
         {
           number: 9968,
           title: "Assigned PR 4",
           url: "https://github.com/owner-1/repo-2/pull/9968",
           author: "user-1",
+          draft: false,
+          reviewStatus: "changes requested",
           updatedAgo: "15 days ago",
+          reviews: [
+            { reviewer: "user-2", state: "changes requested", submittedAgo: "1 month ago" },
+            { reviewer: "user-3", state: "approved", submittedAgo: "1 month ago" },
+          ],
+          pendingReviewers:[],
         },
       ],
     },
     {
       name: "owner-1/repo-3",
       assignedPRs: [
-        // A draft when recorded: Assigned PRs include drafts.
+        // Assigned PRs include drafts.
         {
           number: 381,
           title: "Assigned PR 5",
           url: "https://github.com/owner-1/repo-3/pull/381",
           author: "user-1",
+          draft: true,
+          reviewStatus: "review required",
           updatedAgo: "5 days ago",
+          reviews: [],
+          pendingReviewers:[],
         },
       ],
     },
@@ -141,21 +189,33 @@ const ALL_ASSIGNED = {
           title: "Assigned PR 8",
           url: "https://github.com/owner-2/repo-4/pull/28",
           author: "user-1",
+          draft: false,
+          reviewStatus: "review required",
           updatedAgo: "18 hours ago",
+          reviews: [],
+          pendingReviewers:["user-2"],
         },
         {
           number: 27,
           title: "Assigned PR 7",
           url: "https://github.com/owner-2/repo-4/pull/27",
           author: "user-1",
+          draft: false,
+          reviewStatus: "review required",
           updatedAgo: "19 hours ago",
+          reviews: [],
+          pendingReviewers:["user-2"],
         },
         {
           number: 25,
           title: "Assigned PR 6",
           url: "https://github.com/owner-2/repo-4/pull/25",
           author: "user-1",
+          draft: false,
+          reviewStatus: "review required",
           updatedAgo: "20 hours ago",
+          reviews: [{ reviewer: "user-2", state: "approved", submittedAgo: "21 hours ago" }],
+          pendingReviewers:["user-2"],
         },
       ],
     },
@@ -235,6 +295,142 @@ describe("a check", () => {
     await expect(app.check()).rejects.toThrow("no recorded response left");
 
     expect(await app.pageModel()).toEqual(ALL_ASSIGNED);
+  });
+});
+
+describe("an Assigned PR row", () => {
+  it("marks a draft", async () => {
+    expect((await rowOf(assignedFull, 381)).draft).toBe(true);
+    expect((await rowOf(assignedFull, 28)).draft).toBe(false);
+  });
+
+  it("holds every reviewer's latest review, most recent first, leaving out the PR's author", async () => {
+    expect((await rowOf(assignedFull, 9968)).reviews).toEqual([
+      { reviewer: "user-2", state: "changes requested", submittedAgo: "1 month ago" },
+      { reviewer: "user-3", state: "approved", submittedAgo: "1 month ago" },
+    ]);
+    expect((await rowOf(assignedFull, 25)).reviews).toEqual([
+      { reviewer: "user-2", state: "approved", submittedAgo: "21 hours ago" },
+    ]);
+    expect((await rowOf(assignedFull, 10412)).reviews).toEqual([
+      { reviewer: "user-2", state: "commented", submittedAgo: "2 days ago" },
+    ]);
+    expect((await rowOf(assignedFull, 28)).reviews).toEqual([]);
+  });
+
+  it("holds a reviewer's verdict over their later comments, and never a pending review", async () => {
+    const response = withPR(10420, (pr) => {
+      pr.reviews.nodes = [
+        review("user-2", "APPROVED", "2026-11-01T09:00:00Z"),
+        review("user-3", "DISMISSED", "2026-11-01T09:30:00Z"),
+        review("user-2", "COMMENTED", "2026-11-01T10:00:00Z"),
+        { state: "PENDING", submittedAt: null, author: { login: "user-4" } },
+      ] as RecordedPR["reviews"]["nodes"];
+    });
+
+    expect((await rowOf(response, 10420)).reviews).toEqual([
+      { reviewer: "user-3", state: "dismissed", submittedAgo: "2 hours ago" },
+      { reviewer: "user-2", state: "approved", submittedAgo: "3 hours ago" },
+    ]);
+  });
+
+  // Dismissing a review changes its state in place, keeping when it was
+  // submitted.
+  it("holds a reviewer's later comment once their verdict was dismissed", async () => {
+    const response = withPR(10420, (pr) => {
+      pr.reviews.nodes = [
+        review("user-2", "DISMISSED", "2026-11-01T09:00:00Z"),
+        review("user-2", "COMMENTED", "2026-11-01T10:00:00Z"),
+      ] as RecordedPR["reviews"]["nodes"];
+    });
+
+    const row = await rowOf(response, 10420);
+    expect(row.reviews).toEqual([{ reviewer: "user-2", state: "commented", submittedAgo: "2 hours ago" }]);
+    expect(row.reviewStatus).toBe("review required");
+  });
+
+  it("holds everyone a review is still requested from", async () => {
+    expect((await rowOf(assignedFull, 28)).pendingReviewers).toEqual(["user-2"]);
+    expect((await rowOf(assignedFull, 9968)).pendingReviewers).toEqual([]);
+  });
+
+  it("holds a team a review is still requested from by its slug", async () => {
+    const response = withPR(28, (pr) => {
+      (pr.reviewRequests.nodes as unknown[]).push({
+        requestedReviewer: { __typename: "Team", combinedSlug: "owner-2/team-1" },
+      });
+    });
+
+    expect((await rowOf(response, 28)).pendingReviewers).toEqual(["user-2", "owner-2/team-1"]);
+  });
+});
+
+describe("an Assigned PR's Review status", () => {
+  it.each([
+    [28, "review required"],
+    [9968, "changes requested"],
+    [136, "changes requested"],
+  ])("is GitHub's review decision when GitHub reports one (#%i)", async (number, reviewStatus) => {
+    expect((await rowOf(assignedFull, number)).reviewStatus).toBe(reviewStatus);
+  });
+
+  it("is approved when GitHub's review decision is approved, whatever the reviews say", async () => {
+    const approved = withPR(9968, (pr) => {
+      pr.reviewDecision = "APPROVED";
+    });
+
+    expect((await rowOf(approved, 9968)).reviewStatus).toBe("approved");
+  });
+
+  // #10420 was recorded without a review decision.
+  it.each([
+    [
+      "changes requested when any reviewer's latest verdict requests changes",
+      [review("user-2", "APPROVED", "2026-10-30T10:00:00Z"), review("user-3", "CHANGES_REQUESTED", "2026-10-30T11:00:00Z")],
+      "changes requested",
+    ],
+    [
+      "approved when a reviewer approves after requesting changes",
+      [review("user-2", "CHANGES_REQUESTED", "2026-10-30T10:00:00Z"), review("user-2", "APPROVED", "2026-10-30T11:00:00Z")],
+      "approved",
+    ],
+    [
+      "approved when a reviewer comments after approving",
+      [review("user-2", "APPROVED", "2026-10-30T10:00:00Z"), review("user-2", "COMMENTED", "2026-10-30T11:00:00Z")],
+      "approved",
+    ],
+    [
+      "changes requested when a reviewer comments after requesting changes, despite another's approval",
+      [
+        review("user-2", "CHANGES_REQUESTED", "2026-10-30T10:00:00Z"),
+        review("user-3", "APPROVED", "2026-10-30T11:00:00Z"),
+        review("user-2", "COMMENTED", "2026-10-30T12:00:00Z"),
+      ],
+      "changes requested",
+    ],
+    [
+      "review required when the only approval was dismissed",
+      [review("user-2", "DISMISSED", "2026-10-30T10:00:00Z"), review("user-3", "COMMENTED", "2026-10-30T11:00:00Z")],
+      "review required",
+    ],
+    [
+      "approved when a pending review follows an approval",
+      [review("user-3", "APPROVED", "2026-10-30T10:00:00Z"), { state: "PENDING", submittedAt: null, author: { login: "user-3" } }],
+      "approved",
+    ],
+  ])("without GitHub's review decision, is %s", async (_, reviews, reviewStatus) => {
+    const response = withPR(10420, (pr) => {
+      pr.reviews.nodes = reviews as RecordedPR["reviews"]["nodes"];
+    });
+
+    expect((await rowOf(response, 10420)).reviewStatus).toBe(reviewStatus);
+  });
+
+  it.each([
+    ["only comments", 10412],
+    ["no reviews", 381],
+  ])("without GitHub's review decision, is review required with %s", async (_, number) => {
+    expect((await rowOf(assignedFull, number)).reviewStatus).toBe("review required");
   });
 });
 
