@@ -1,0 +1,116 @@
+{
+  "data": {
+    "assigned": {
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "Y3Vyc29yOjg="
+      },
+      "nodes": [
+        {
+          "number": 28,
+          "state": "OPEN",
+          "title": "Assigned PR 8",
+          "url": "https://github.com/owner-2/repo-4/pull/28",
+          "updatedAt": "2026-10-31T17:18:35Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-2/repo-4"
+          }
+        },
+        {
+          "number": 27,
+          "state": "OPEN",
+          "title": "Assigned PR 7",
+          "url": "https://github.com/owner-2/repo-4/pull/27",
+          "updatedAt": "2026-10-31T16:47:06Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-2/repo-4"
+          }
+        },
+        {
+          "number": 25,
+          "state": "OPEN",
+          "title": "Assigned PR 6",
+          "url": "https://github.com/owner-2/repo-4/pull/25",
+          "updatedAt": "2026-10-31T15:55:40Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-2/repo-4"
+          }
+        },
+        {
+          "number": 10420,
+          "state": "OPEN",
+          "title": "Assigned PR 3",
+          "url": "https://github.com/owner-1/repo-2/pull/10420",
+          "updatedAt": "2026-10-30T17:15:20Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          }
+        },
+        {
+          "number": 10412,
+          "state": "OPEN",
+          "title": "Assigned PR 2",
+          "url": "https://github.com/owner-1/repo-2/pull/10412",
+          "updatedAt": "2026-10-29T15:32:37Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          }
+        },
+        {
+          "number": 381,
+          "state": "OPEN",
+          "title": "Assigned PR 5",
+          "url": "https://github.com/owner-1/repo-3/pull/381",
+          "updatedAt": "2026-10-26T15:56:29Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-3"
+          }
+        },
+        {
+          "number": 9968,
+          "state": "OPEN",
+          "title": "Assigned PR 4",
+          "url": "https://github.com/owner-1/repo-2/pull/9968",
+          "updatedAt": "2026-10-16T14:23:42Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-2"
+          }
+        },
+        {
+          "number": 136,
+          "state": "OPEN",
+          "title": "Assigned PR 1",
+          "url": "https://github.com/owner-1/repo-1/pull/136",
+          "updatedAt": "2026-10-16T14:23:50Z",
+          "author": {
+            "login": "user-1"
+          },
+          "repository": {
+            "nameWithOwner": "owner-1/repo-1"
+          }
+        }
+      ]
+    }
+  }
+}
