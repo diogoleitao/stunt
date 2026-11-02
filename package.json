@@ -5,13 +5,17 @@
   "description": "A local PR activity tracker with Tasks and Feature grouping.",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "stunt": "dist/cli/main.js"
+  },
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 4848",
-    "build": "next build",
-    "typecheck": "tsc --noEmit",
+    "build": "next build && tsc -p tsconfig.cli.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.cli.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
