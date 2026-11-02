@@ -66,6 +66,8 @@ export type TaskRow = {
 
 export type RepositoryModel = {
   name: string;
+  // How many open Tasks, Assigned PRs, and Review inbox PRs it holds.
+  counts:{ tasks: number; assignedPRs: number; reviewInbox: number };
   // Grouped by PR, the PR with the oldest Task first.
   tasks: TaskGroup[];
   assignedPRs: AssignedPRRow[];
@@ -73,9 +75,15 @@ export type RepositoryModel = {
   reviewInbox: ReviewInboxRow[];
 };
 
+// A repository's open Tasks in the All Tasks view.
+export type RepositoryTasks = Pick<RepositoryModel, "name" | "tasks">;
+
 export type PageModel = {
   checkedAt?: string;
+  // The sidebar's repositories, the one with the most open Tasks first.
   repositories: RepositoryModel[];
+  // Every repository with open Tasks, in sidebar order.
+  allTasks: RepositoryTasks[];
 };
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -165,7 +173,7 @@ function openTasks(state: State): Task[] {
 // Every repository with an Assigned PR, a Review inbox PR, or an open Task.
 function repositoryNames(state: State): string[] {
   const names = new Set([...state.assignedPRs, ...state.reviewInbox, ...openTasks(state)].map((pr) => pr.repository));
-  return [...names].sort((a, b) => a.localeCompare(b));
+  return [...names];
 }
 
 function taskGroups(tasks: Task[], now: Date): TaskGroup[] {
@@ -182,13 +190,15 @@ function taskGroups(tasks: Task[], now: Date): TaskGroup[] {
 }
 
 export function pageModel(state: State, now: Date): PageModel {
-  const repositories = repositoryNames(state).map((name) => {
+  const repositories = repositoryNames(state).map((name): RepositoryModel => {
     const tasks = openTasks(state).filter((task) => task.repository === name);
+    const assignedPRs = state.assignedPRs.filter((pr) => pr.repository === name);
+    const reviewInbox = state.reviewInbox.filter((pr) => pr.repository === name);
     return {
       name,
+      counts: { tasks: tasks.length, assignedPRs: assignedPRs.length, reviewInbox: reviewInbox.length },
       tasks: taskGroups(tasks, now),
-      assignedPRs: state.assignedPRs
-        .filter((pr) => pr.repository === name)
+      assignedPRs: assignedPRs
         .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
         .map((pr) => {
           const reviews = standingReviews(pr);
@@ -211,8 +221,7 @@ export function pageModel(state: State, now: Date): PageModel {
             pendingReviewers: pr.pendingReviewers,
           };
         }),
-      reviewInbox: state.reviewInbox
-        .filter((pr) => pr.repository === name)
+      reviewInbox: reviewInbox
         .toSorted((a, b) => requestTime(a) - requestTime(b))
         .map((pr) => ({
           number: pr.number,
@@ -224,6 +233,11 @@ export function pageModel(state: State, now: Date): PageModel {
         })),
     };
   });
+  repositories.sort((a, b) => b.counts.tasks - a.counts.tasks || a.name.localeCompare(b.name));
 
-  return { checkedAt: state.checkedAt, repositories };
+  const allTasks = repositories
+    .filter((repository) => repository.counts.tasks > 0)
+    .map(({ name, tasks }) => ({ name, tasks }));
+
+  return { checkedAt: state.checkedAt, repositories, allTasks };
 }

@@ -27,7 +27,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 </Link>
                 <ThemeToggle />
               </div>
-              <RepositoryNav names={model.repositories.map((repository) => repository.name)} />
+              <RepositoryNav
+                repositories={model.repositories.map(({ name, counts }) => ({ name, counts }))}
+              />
             </aside>
             <main className="min-w-0 flex-1 p-8">{children}</main>
           </div>
