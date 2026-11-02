@@ -24,7 +24,7 @@ export function openStunt({ github, dataDir, configPath, home, clock }: StuntOpt
   const store = openStore(dataDir);
 
   // Asks GitHub once for what changed, reads the Issue tracker of each
-  // repository it saw and the Features its Assigned PRs ship, stores what it
+  // repository it saw and the Features its PRs ship, stores what it
   // saw, and turns new activity into Tasks. Resolves to the Notifications
   // announcing them.
   async function check(): Promise<Notification[]> {
@@ -39,7 +39,7 @@ export function openStunt({ github, dataDir, configPath, home, clock }: StuntOpt
     const repositories = new Set([...prs.assignedPRs, ...prs.reviewInbox].map((pr) => pr.repository));
     const clones = await locateClones(config);
     const issueTrackers = await readIssueTrackers(github, [...repositories], clones);
-    const featureLinks = await readFeatureLinks(prs.assignedPRs, issueTrackers, clones);
+    const featureLinks = await readFeatureLinks(github, prs, issueTrackers, clones);
     let created: Task[] = [];
     await store.update((state) => {
       const next = { ...applyCheck(state, prs, checkedAt), issueTrackers, featureLinks };

@@ -21,12 +21,16 @@ export type AssignedPRRow = {
   pendingReviewers: string[];
 };
 
-// Assigned PRs under the Feature they ship, by the Feature's name, or under
-// Unfiled when the Feature is null.
-export type AssignedPRGroup = {
+// PRs under the Feature they ship, by the Feature's name, or under Unfiled
+// when the Feature is null.
+export type FeatureGroup<Row> = {
   feature: string | null;
-  prs: AssignedPRRow[];
+  prs: Row[];
 };
+
+export type AssignedPRGroup = FeatureGroup<AssignedPRRow>;
+
+export type ReviewInboxGroup = FeatureGroup<ReviewInboxRow>;
 
 export type ReviewRow = {
   reviewer: string;
@@ -86,8 +90,10 @@ export type RepositoryModel = {
   // each Feature's PRs in Ticket order, then Unfiled, most recently updated
   // first.
   assignedPRs: AssignedPRGroup[];
-  // Oldest request first.
-  reviewInbox: ReviewInboxRow[];
+  // Grouped by Feature in a GitHub repository, as Assigned PRs are, and all
+  // Unfiled elsewhere. Unfiled, and PRs a Feature's Ticket order leaves
+  // tied, oldest request first.
+  reviewInbox: ReviewInboxGroup[];
 };
 
 // A repository's open Tasks in the All Tasks view.
@@ -217,35 +223,37 @@ function assignedPRRow(pr: AssignedPR, tasks: Task[], now: Date): AssignedPRRow 
   };
 }
 
-// A Feature's name from its slug: hyphens as spaces, first letter capital.
-function featureName(slug: string): string {
-  const words = slug.replaceAll("-", " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 // `prs` under the Feature whose Ticket `links` them, the Feature with the
-// most recently updated PR first, each Feature's PRs in Ticket order. The
-// PRs no Ticket links are Unfiled, last, most recently updated first.
-function assignedPRGroups(
-  prs: AssignedPR[],
+// most recently updated PR first, each Feature's PRs in Ticket order, those
+// not among its Tickets last. The PRs no Ticket links are Unfiled, last. PRs
+// Ticket order leaves tied, and Unfiled PRs, are in `order`.
+function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
+  prs: PR[],
   links: FeatureLink[],
-  row: (pr: AssignedPR) => AssignedPRRow,
-): AssignedPRGroup[] {
-  // Each linked PR's Feature slug and its place in Ticket order.
-  const linked = new Map(links.map(({ number, featureSlug }, order) => [number, { featureSlug, order }]));
-  const ticketOrder = (pr: AssignedPR) => linked.get(pr.number)?.order ?? 0;
-  const features = new Map<string, AssignedPR[]>();
-  const unfiled: AssignedPR[] = [];
-  for (const pr of prs.toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))) {
-    const featureSlug = linked.get(pr.number)?.featureSlug;
-    if (featureSlug === undefined) unfiled.push(pr);
-    else features.set(featureSlug, [...(features.get(featureSlug) ?? []), pr]);
+  order: (a: PR, b: PR) => number,
+  row: (pr: PR) => Row,
+): FeatureGroup<Row>[] {
+  const linked = new Map(links.map((link) => [link.number, link]));
+  const ticketOrder = (pr: PR) => linked.get(pr.number)?.ticketOrder ?? Number.POSITIVE_INFINITY;
+  const lastUpdated = (prs: PR[]) => Math.max(...prs.map((pr) => Date.parse(pr.updatedAt)));
+  const features = new Map<string, { name: string; prs: PR[] }>();
+  const unfiled: PR[] = [];
+  for (const pr of prs) {
+    const link = linked.get(pr.number);
+    if (link === undefined) unfiled.push(pr);
+    else {
+      const feature = features.get(link.featureId) ?? { name: link.featureName, prs: [] };
+      features.set(link.featureId, { ...feature, prs: [...feature.prs, pr] });
+    }
   }
-  const groups = [...features].map(([featureSlug, prs]) => ({
-    feature: featureName(featureSlug),
-    prs: prs.toSorted((a, b) => ticketOrder(a) - ticketOrder(b)).map(row),
-  }));
-  return unfiled.length === 0 ? groups : [...groups, { feature: null, prs: unfiled.map(row) }];
+  const groups = [...features.values()]
+    .toSorted((a, b) => lastUpdated(b.prs) - lastUpdated(a.prs))
+    .map(({ name, prs }) => ({
+      feature: name,
+      // Infinity minus Infinity is NaN, which leaves two PRs to `order`.
+      prs: prs.toSorted((a, b) => ticketOrder(a) - ticketOrder(b) || order(a, b)).map(row),
+    }));
+  return unfiled.length === 0 ? groups : [...groups, { feature: null, prs: unfiled.toSorted(order).map(row) }];
 }
 
 export function pageModel(state: State, now: Date): PageModel {
@@ -253,24 +261,33 @@ export function pageModel(state: State, now: Date): PageModel {
     const tasks = openTasks(state).filter((task) => task.repository === name);
     const assignedPRs = state.assignedPRs.filter((pr) => pr.repository === name);
     const reviewInbox = state.reviewInbox.filter((pr) => pr.repository === name);
+    const issueTracker = state.issueTrackers[name] ?? null;
+    const links = state.featureLinks[name] ?? [];
     return {
       name,
-      issueTracker: state.issueTrackers[name] ?? null,
+      issueTracker,
       counts: { tasks: tasks.length, assignedPRs: assignedPRs.length, reviewInbox: reviewInbox.length },
       tasks: taskGroups(tasks, now),
-      assignedPRs: assignedPRGroups(assignedPRs, state.featureLinks[name] ?? [], (pr) =>
-        assignedPRRow(pr, tasks, now),
+      assignedPRs: featureGroups(
+        assignedPRs,
+        links,
+        (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
+        (pr) => assignedPRRow(pr, tasks, now),
       ),
-      reviewInbox: reviewInbox
-        .toSorted((a, b) => requestTime(a) - requestTime(b))
-        .map((pr) => ({
+      // Only a GitHub repository groups its Review inbox by Feature.
+      reviewInbox: featureGroups(
+        reviewInbox,
+        issueTracker === "GitHub" ? links : [],
+        (a, b) => requestTime(a) - requestTime(b),
+        (pr) => ({
           number: pr.number,
           title: pr.title,
           url: pr.url,
           author: pr.author,
           request: pr.request === null ? null : { by: pr.request.by, ago: timeAgo(pr.request.waitingSince, now) },
           reRequest: pr.reRequest,
-        })),
+        }),
+      ),
     };
   });
   repositories.sort((a, b) => b.counts.tasks - a.counts.tasks || a.name.localeCompare(b.name));

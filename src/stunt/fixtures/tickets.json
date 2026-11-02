@@ -1,0 +1,83 @@
+{
+  "data": {
+    "ticket0": {
+      "issue": {
+        "url": "https://github.com/owner-1/repo-2/issues/12",
+        "title": "Ticket 1",
+        "parent": {
+          "url": "https://github.com/owner-1/repo-2/issues/1",
+          "title": "Feature 1",
+          "subIssues": {
+            "nodes": [
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/2"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/3"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/4"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/5"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/6"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/7"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/8"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/9"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/10"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/11"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/12"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/13"
+              },
+              {
+                "url": "https://github.com/owner-1/repo-2/issues/14"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "ticket1": {
+      "issue": {
+        "url": "https://github.com/owner-1/repo-2/issues/1",
+        "title": "Feature 1",
+        "parent": null
+      }
+    },
+    "ticket2": {
+      "issue": null
+    }
+  },
+  "errors": [
+    {
+      "type": "NOT_FOUND",
+      "path": [
+        "ticket2",
+        "issue"
+      ],
+      "locations": [
+        {
+          "line": 4,
+          "column": 55
+        }
+      ],
+      "message": "Could not resolve to an Issue with the number of 99999."
+    }
+  ]
+}

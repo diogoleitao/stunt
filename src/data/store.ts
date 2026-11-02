@@ -16,8 +16,8 @@ export type State = CheckedPRs & {
   // The Issue tracker of each repository the last check saw that declares
   // one stunt groups by.
   issueTrackers: Record<string, IssueTracker>;
-  // Each Local Markdown repository's links of its Assigned PRs to Features,
-  // in Feature slug order, then Ticket number order.
+  // The links of each Local Markdown repository's Assigned PRs, and of each
+  // GitHub repository's Assigned PRs and Review inbox PRs, to Features.
   featureLinks: Record<string, FeatureLink[]>;
 };
 

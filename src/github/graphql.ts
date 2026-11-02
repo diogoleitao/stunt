@@ -16,6 +16,21 @@ export function repositoryParameters(count: number): string {
   return Array.from({ length: count }, (_, i) => `, $owner${i}: String!, $name${i}: String!`).join("");
 }
 
+// The variable definitions naming `count` issues or PRs by their index:
+// $owner0, $name0, and $number0, and so on.
+export function issueParameters(count: number): string {
+  return repositoryParameters(count) + Array.from({ length: count }, (_, i) => `, $number${i}: Int!`).join("");
+}
+
+// The values of those variables for `issues`, each by its `owner/repo` and
+// number.
+export function issueVariables(issues: { repository: string; number: number }[]): Record<string, unknown> {
+  return {
+    ...repositoryVariables(issues.map((issue) => issue.repository)),
+    ...Object.fromEntries(issues.map(({ number }, i) => [`number${i}`, number])),
+  };
+}
+
 // The values of those variables for `repositories`, each an `owner/repo`.
 export function repositoryVariables(repositories: string[]): Record<string, string> {
   return Object.fromEntries(

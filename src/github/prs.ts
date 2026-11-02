@@ -1,5 +1,5 @@
 import type { GitHubClient } from "./client.ts";
-import { dataOf, type GraphQLError, repositoryParameters, repositoryVariables } from "./graphql.ts";
+import { dataOf, type GraphQLError, issueParameters, issueVariables } from "./graphql.ts";
 
 export type AssignedPR = {
   repository: string;
@@ -15,6 +15,8 @@ export type AssignedPR = {
   reviews: Review[];
   // Who a review is still requested from: user logins and team slugs.
   pendingReviewers: string[];
+  // The issue its body names as its Ticket, null when it names none.
+  ticket: number | null;
 };
 
 // An open PR with a direct Review request still pending for the viewer.
@@ -24,6 +26,9 @@ export type ReviewInboxPR = {
   title: string;
   url: string;
   author: string;
+  updatedAt: string;
+  // The issue its body names as its Ticket, null when it names none.
+  ticket: number | null;
   // The latest Review request for the viewer: who made it, when, and since
   // when it has waited, which is when the PR was last marked ready if that
   // came later. Null when the request is older than the events the query
@@ -85,9 +90,8 @@ export type TrackedPR = PRRef & {
 // PR's own state and pending requests are fetched too. A page that overflows
 // is followed by querying only its own search.
 function checkQuery(lookups: number): string {
-  const indexes = Array.from({ length: lookups }, (_, i) => i);
-  const variables = repositoryParameters(lookups) + indexes.map((i) => `, $number${i}: Int!`).join("");
-  const tracked = indexes
+  const variables = issueParameters(lookups);
+  const tracked = Array.from({ length: lookups }, (_, i) => i)
     .map(
       (i) => `
   tracked${i}: repository(owner: $owner${i}, name: $name${i}) {
@@ -160,6 +164,7 @@ fragment PR on PullRequest {
   title
   url
   updatedAt
+  body
   author { login }
   repository { nameWithOwner }
   reviewDecision
@@ -198,6 +203,7 @@ type PRNode<Reviews extends ReviewNode = ReviewNode> = {
   title: string;
   url: string;
   updatedAt: string;
+  body: string;
   author: { login: string } | null;
   repository: { nameWithOwner: string };
   reviewDecision: ReviewDecision | null;
@@ -268,6 +274,16 @@ function submittedReviews(node: PRNode): Review[] {
   );
 }
 
+// The line by which a PR's body names its Ticket, in any case, as GitHub
+// reads `closes #N`. Any other mention of an issue does not name it.
+const TICKET_LINE = /^(?:Closes|Part of) #(\d+)\b/im;
+
+// The issue a PR's body names as its Ticket, by its first Ticket line.
+function ticket(node: PRNode): number | null {
+  const number = TICKET_LINE.exec(node.body)?.[1];
+  return number === undefined ? null : Number(number);
+}
+
 function assignedPR(node: PRNode): AssignedPR {
   return {
     repository: node.repository.nameWithOwner,
@@ -284,6 +300,7 @@ function assignedPR(node: PRNode): AssignedPR {
       if (reviewer === null) return [];
       return [reviewer.__typename === "Team" ? reviewer.combinedSlug : reviewer.login];
     }),
+    ticket: ticket(node),
   };
 }
 
@@ -406,6 +423,8 @@ function reviewInboxPR(node: InboxNode, viewer: string): ReviewInboxPR | undefin
     title: node.title,
     url: node.url,
     author: login(node.author),
+    updatedAt: node.updatedAt,
+    ticket: ticket(node),
     request:
       request === undefined
         ? null
@@ -440,13 +459,6 @@ function trackedPR(
     pendingRequest: isRequested(node, viewer)
       ? { requestedAt: latestRequest(node, viewer)?.createdAt ?? null }
       : null,
-  };
-}
-
-function lookupVariables(lookups: PRRef[]): Record<string, unknown> {
-  return {
-    ...repositoryVariables(lookups.map((lookup) => lookup.repository)),
-    ...Object.fromEntries(lookups.map(({ number }, i) => [`number${i}`, number])),
   };
 }
 
@@ -492,7 +504,7 @@ export async function fetchPRs(
         assignedAfter: assignedPaging.after,
         inbox: withInbox,
         inboxAfter: inboxPaging.after,
-        ...lookupVariables(looking),
+        ...issueVariables(looking),
       }),
     );
     viewer = data.viewer.login;

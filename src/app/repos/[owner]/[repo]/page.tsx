@@ -36,12 +36,7 @@ export default async function RepositoryPage({
         {repository === undefined || repository.assignedPRs.length === 0 ? (
           <p className="text-muted-foreground">No Assigned PRs in {name}.</p>
         ) : (
-          repository.assignedPRs.map((group) => (
-            <div key={group.feature ?? "Unfiled"} className="flex flex-col gap-1">
-              <h3 className="text-sm font-medium text-muted-foreground">{group.feature ?? "Unfiled"}</h3>
-              <AssignedPRTable prs={group.prs} />
-            </div>
-          ))
+          <AssignedPRTable groups={repository.assignedPRs} />
         )}
       </section>
       <section className="flex flex-col gap-2">
@@ -49,7 +44,7 @@ export default async function RepositoryPage({
         {repository === undefined || repository.reviewInbox.length === 0 ? (
           <p className="text-muted-foreground">Your Review inbox in {name} is empty.</p>
         ) : (
-          <ReviewInboxTable prs={repository.reviewInbox} />
+          <ReviewInboxTable groups={repository.reviewInbox} />
         )}
       </section>
     </div>

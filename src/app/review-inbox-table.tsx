@@ -1,12 +1,15 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { ReviewInboxRow } from "../stunt/page-model.ts";
+import { TableCell, TableHead, TableRow } from "@/components/ui/table";
+import type { ReviewInboxGroup } from "../stunt/page-model.ts";
 import { Badge } from "./badge.tsx";
+import { FeatureGroups } from "./feature-groups.tsx";
 
-// A repository's Review inbox, oldest request first.
-export function ReviewInboxTable({ prs }: { prs: ReviewInboxRow[] }) {
+// A repository's Review inbox, under its Feature headings.
+export function ReviewInboxTable({ groups }: { groups: ReviewInboxGroup[] }) {
   return (
-    <Table>
-      <TableHeader>
+    <FeatureGroups
+      groups={groups}
+      columns={5}
+      header={
         <TableRow>
           <TableHead className="w-20">PR</TableHead>
           <TableHead>Title</TableHead>
@@ -14,9 +17,9 @@ export function ReviewInboxTable({ prs }: { prs: ReviewInboxRow[] }) {
           <TableHead>Requested by</TableHead>
           <TableHead className="text-right">Requested</TableHead>
         </TableRow>
-      </TableHeader>
-      <TableBody>
-        {prs.map((pr) => (
+      }
+      rows={(prs) =>
+        prs.map((pr) => (
           <TableRow key={pr.number}>
             <TableCell className="text-muted-foreground tabular-nums">#{pr.number}</TableCell>
             <TableCell className="max-w-0 w-full">
@@ -35,8 +38,8 @@ export function ReviewInboxTable({ prs }: { prs: ReviewInboxRow[] }) {
             <TableCell className="text-muted-foreground">{pr.request?.by ?? "unknown"}</TableCell>
             <TableCell className="text-right text-muted-foreground">{pr.request?.ago ?? "unknown"}</TableCell>
           </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+        ))
+      }
+    />
   );
 }

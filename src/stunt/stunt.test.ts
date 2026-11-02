@@ -19,6 +19,9 @@ import repliesFull from "./fixtures/replies.json" with { type: "json" };
 // declaration on the default branch of a repository that has one, of one that
 // has none, and of one GitHub does not find.
 import declarationsFull from "./fixtures/declarations.json" with { type: "json" };
+// Recorded and stripped the same way, by the query for the Tickets PR bodies
+// name: one with a parent, one without, and one GitHub does not find.
+import ticketsFull from "./fixtures/tickets.json" with { type: "json" };
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 
@@ -46,23 +49,60 @@ const DECLARED = declarationsFull.data.repository0;
 const UNDECLARED = declarationsFull.data.repository1;
 const NOT_FOUND = "not found";
 
+// An issue's answer to the query for the Tickets PR bodies name.
+type Ticket = (typeof ticketsFull)["data"]["ticket0" | "ticket1"]["issue"] | "not found";
+
+// The recorded Ticket #12 of owner-1/repo-2, whose parent is Feature #1, and
+// Feature #1, which has no parent.
+const PARENTED: Ticket = ticketsFull.data.ticket0.issue;
+const PARENTLESS: Ticket = ticketsFull.data.ticket1.issue;
+
+// The recorded check responses predate the query reading PR bodies, so each
+// PR in `data` gets an empty body unless a test gives it one.
+function withBodies(data: Record<string, unknown>) {
+  const prs = Object.entries(data).flatMap(([key, value]) => {
+    if (key === "assigned" || key === "inbox") return (value as { nodes: object[] } | undefined)?.nodes ?? [];
+    if (key.startsWith("tracked")) return [(value as { pullRequest: object | null } | null)?.pullRequest ?? null];
+    return [];
+  });
+  for (const pr of prs) if (pr !== null && !("body" in pr)) Object.assign(pr, { body: "" });
+}
+
 // Replays recorded response bodies in order, one per check query. A query for
 // reviews' inline comments, by their ids, is answered from `replies`. A query
 // for Issue tracker declarations on default branches is answered from
 // `declarations`, by repository, a repository left out having none; those
-// queries are kept apart in `declarationCalls`.
+// queries are kept apart in `declarationCalls`. A query for the Tickets PR
+// bodies name is answered from `tickets`, by `owner/repo#N`; those queries are
+// kept apart in `ticketCalls`.
 function fakeGitHub(
   responses: Response[],
   replies = repliesFull,
   declarations: Record<string, Declaration> = {},
-): GitHubClient & { calls: GraphQLCall[]; declarationCalls: GraphQLCall[] } {
+  tickets: Record<string, Ticket> = {},
+): GitHubClient & { calls: GraphQLCall[]; declarationCalls: GraphQLCall[]; ticketCalls: GraphQLCall[] } {
   const queue = [...responses];
   const calls: GraphQLCall[] = [];
   const declarationCalls: GraphQLCall[] = [];
+  const ticketCalls: GraphQLCall[] = [];
   return {
     calls,
     declarationCalls,
+    ticketCalls,
     async graphql(query, variables) {
+      if (query.startsWith("query Tickets")) {
+        ticketCalls.push({ query, variables });
+        const data: Record<string, unknown> = {};
+        const errors: unknown[] = [];
+        for (let i = 0; `owner${i}` in variables; i++) {
+          const key = `${variables[`owner${i}`]}/${variables[`name${i}`]}#${variables[`number${i}`]}`;
+          const ticket = tickets[key];
+          if (ticket === undefined) throw new Error(`no recorded Ticket ${key}`);
+          data[`ticket${i}`] = { issue: ticket === NOT_FOUND ? null : ticket };
+          if (ticket === NOT_FOUND) errors.push({ ...ticketsFull.errors[0], path: [`ticket${i}`, "issue"] });
+        }
+        return structuredClone(errors.length === 0 ? { data } : { data, errors });
+      }
       if (query.startsWith("query Declarations")) {
         declarationCalls.push({ query, variables });
         const data: Record<string, unknown> = {};
@@ -85,7 +125,10 @@ function fakeGitHub(
       }
       if (queue.length === 0) throw new Error("no recorded response left");
       const response = queue.shift();
-      return structuredClone(typeof response === "function" ? response(variables) : response);
+      const body = structuredClone(typeof response === "function" ? response(variables) : response);
+      const data = (body as { data?: Record<string, unknown> | null }).data;
+      if (data !== undefined && data !== null) withBodies(data);
+      return body;
     },
   };
 }
@@ -277,9 +320,14 @@ async function inboxOf(inbox: Recorded, repository: string) {
   return inboxRows(await modelOf(checkResponse(assignedFull, inbox)), repository);
 }
 
-// The Review inbox rows of `repository` in `model`.
+// The Review inbox rows of `repository` in `model`, in order across their
+// Feature groups.
 function inboxRows(model: Awaited<ReturnType<typeof modelOf>>, repository: string) {
-  return model.repositories.find((candidate) => candidate.name === repository)?.reviewInbox ?? [];
+  return (
+    model.repositories
+      .find((candidate) => candidate.name === repository)
+      ?.reviewInbox.flatMap((group) => group.prs) ?? []
+  );
 }
 
 // The page model after one check returning `response`, in a data directory of
@@ -1829,6 +1877,24 @@ describe("the Issue tracker", () => {
   });
 });
 
+// The rows of `numbers` in `repository` after a check of
+// assigned-prs-full.json at NOW, in that order.
+function rows(repository: string, ...numbers: number[]) {
+  const prs = ALL_ASSIGNED.repositories
+    .find((candidate) => candidate.name === repository)
+    ?.assignedPRs.flatMap((group) => group.prs);
+  return numbers.map((number) => {
+    const row = prs?.find((pr) => pr.number === number);
+    if (row === undefined) throw new Error(`no Assigned PR row for ${repository}#${number}`);
+    return row;
+  });
+}
+
+// The Assigned PR groups of `repository` in `model`.
+function groupsOf(model: Awaited<ReturnType<typeof modelOf>>, repository: string) {
+  return model.repositories.find((candidate) => candidate.name === repository)?.assignedPRs;
+}
+
 describe("Feature grouping in a Local Markdown repository", () => {
   const LOCAL_MARKDOWN = "# Issue tracker: Local Markdown\n\nIssues and specs for this repo live as markdown files in `.scratch/`.\n";
 
@@ -1844,24 +1910,6 @@ describe("Feature grouping in a Local Markdown repository", () => {
   // it.
   function ticket(title: string, pr: number) {
     return `# ${title}\n\nStatus: ready-for-agent\n\n**PR:** #${pr} (merged 2026-10-26, squash \`f921607e9\`)\n\n## What to build\n\nThe change.\n`;
-  }
-
-  // The rows of `numbers` in `repository` after a check of
-  // assigned-prs-full.json at NOW, in that order.
-  function rows(repository: string, ...numbers: number[]) {
-    const prs = ALL_ASSIGNED.repositories
-      .find((candidate) => candidate.name === repository)
-      ?.assignedPRs.flatMap((group) => group.prs);
-    return numbers.map((number) => {
-      const row = prs?.find((pr) => pr.number === number);
-      if (row === undefined) throw new Error(`no Assigned PR row for ${repository}#${number}`);
-      return row;
-    });
-  }
-
-  // The Assigned PR groups of `repository` in `model`.
-  function groupsOf(model: Awaited<ReturnType<typeof modelOf>>, repository: string) {
-    return model.repositories.find((candidate) => candidate.name === repository)?.assignedPRs;
   }
 
   it("groups an Assigned PR under the Feature, named after it, whose Ticket's PR line names it, with Unfiled last", async () => {
@@ -1982,6 +2030,197 @@ describe("Feature grouping in a Local Markdown repository", () => {
     expect(issueTrackers(model)).toMatchObject({ "owner-1/repo-2": "Local Markdown", "owner-2/repo-4": "GitHub" });
     expect(groupsOf(model, "owner-1/repo-2")).toEqual([{ feature: null, prs: rows("owner-1/repo-2", 10420, 10412, 9968) }]);
     expect(groupsOf(model, "owner-2/repo-4")).toEqual([{ feature: null, prs: rows("owner-2/repo-4", 28, 27, 25) }]);
+  });
+});
+
+describe("Feature grouping in a GitHub repository", () => {
+  // owner-1/repo-2 has no clone and declares GitHub on its default branch.
+  const GITHUB_TRACKER = { "owner-1/repo-2": DECLARED };
+
+  // Gives a recorded PR `body`.
+  function withBody(body: string) {
+    return (pr: object) => Object.assign(pr, { body });
+  }
+
+  it("groups a PR under the parent, named after it, of the issue its body closes, with Unfiled last", async () => {
+    const response = withPR(10420, withBody("## What\n\nThe change.\n\nCloses #12\n"));
+    const app = stunt(
+      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, { "owner-1/repo-2#12": PARENTED }),
+    );
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 10420) },
+      { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+    ]);
+  });
+
+  it("makes an issue with no parent the Feature, named after it, of a PR whose body says it is part of it", async () => {
+    const response = withPR(9968, withBody("Part of #1\n\n## What\n\nThe change.\n"));
+    const app = stunt(
+      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, { "owner-1/repo-2#1": PARENTLESS }),
+    );
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968) },
+      { feature: null, prs: rows("owner-1/repo-2", 10420, 10412) },
+    ]);
+  });
+
+  it("orders a Feature's PRs by the order of its Tickets, a PR naming the Feature itself last", async () => {
+    const response = structuredClone(assignedFull);
+    // #10420 was updated last, #9968 first, but #3 comes before #12 among
+    // Feature 1's Tickets.
+    withBody("Closes #12")(response.data.assigned.nodes.find((pr) => pr.number === 10420) as object);
+    withBody("Part of #1")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
+    withBody("Closes #3")(response.data.assigned.nodes.find((pr) => pr.number === 9968) as object);
+    const app = stunt(
+      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, {
+        "owner-1/repo-2#12": PARENTED,
+        "owner-1/repo-2#1": PARENTLESS,
+        "owner-1/repo-2#3": { ...PARENTED, url: "https://github.com/owner-1/repo-2/issues/3", title: "Ticket 2" },
+      }),
+    );
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968, 10420, 10412) },
+    ]);
+  });
+
+  it("orders Features by their most recently updated PR", async () => {
+    const response = structuredClone(assignedFull);
+    // #10420 was updated last.
+    withBody("Closes #20")(response.data.assigned.nodes.find((pr) => pr.number === 10420) as object);
+    withBody("Closes #12")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
+    const app = stunt(
+      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, {
+        "owner-1/repo-2#12": PARENTED,
+        // Feature 2 keeps Feature 1's recorded Tickets, which order nothing
+        // here.
+        "owner-1/repo-2#20": {
+          ...PARENTED,
+          url: "https://github.com/owner-1/repo-2/issues/20",
+          title: "Ticket 3",
+          parent: { ...PARENTED.parent, url: "https://github.com/owner-1/repo-2/issues/15", title: "Feature 2" },
+        },
+      }),
+    );
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Feature 2", prs: rows("owner-1/repo-2", 10420) },
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 10412) },
+      { feature: null, prs: rows("owner-1/repo-2", 9968) },
+    ]);
+  });
+
+  it("groups the Review inbox by Feature the same way, Unfiled last, oldest request first", async () => {
+    const inbox = inboxRows(await modelOf(checkResponse(assignedFull, inboxFull)), "owner-1/repo-2");
+    const row = (number: number) => inbox.find((pr) => pr.number === number);
+    const response = structuredClone(inboxFull);
+    // #10404 was updated last, then #10306, then #10255, then #10419.
+    withBody("Closes #20")(response.data.inbox.nodes.find((pr) => pr.number === 10404) as object);
+    withBody("Closes #12")(response.data.inbox.nodes.find((pr) => pr.number === 10306) as object);
+    withBody("Closes #3")(response.data.inbox.nodes.find((pr) => pr.number === 10419) as object);
+    const app = stunt(
+      fakeGitHub([checkResponse(assignedFull, response)], repliesFull, GITHUB_TRACKER, {
+        "owner-1/repo-2#12": PARENTED,
+        "owner-1/repo-2#3": { ...PARENTED, url: "https://github.com/owner-1/repo-2/issues/3", title: "Ticket 2" },
+        "owner-1/repo-2#20": { ...PARENTLESS, url: "https://github.com/owner-1/repo-2/issues/20", title: "Feature 2" },
+      }),
+    );
+
+    await app.check();
+
+    const model = await app.pageModel();
+    expect(model.repositories.find((repository) => repository.name === "owner-1/repo-2")?.reviewInbox).toEqual([
+      { feature: "Feature 2", prs: [row(10404)] },
+      { feature: "Feature 1", prs: [row(10419), row(10306)] },
+      { feature: null, prs: [row(10255)] },
+    ]);
+  });
+
+  it("asks GitHub for every Ticket the PRs of GitHub repositories name in one query, each once", async () => {
+    const assigned = structuredClone(assignedFull);
+    const inbox = structuredClone(inboxFull);
+    withBody("Closes #12")(assigned.data.assigned.nodes.find((pr) => pr.number === 10420) as object);
+    withBody("Part of #1")(assigned.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
+    withBody("Closes #12")(inbox.data.inbox.nodes.find((pr) => pr.number === 10419) as object);
+    // owner-2/repo-4 declares no Issue tracker.
+    withBody("Closes #12")(assigned.data.assigned.nodes.find((pr) => pr.number === 25) as object);
+    const github = fakeGitHub([checkResponse(assigned, inbox)], repliesFull, GITHUB_TRACKER, {
+      "owner-1/repo-2#12": PARENTED,
+      "owner-1/repo-2#1": PARENTLESS,
+    });
+
+    await stunt(github).check();
+
+    expect(github.ticketCalls).toHaveLength(1);
+    const { variables } = github.ticketCalls[0];
+    const asked = Object.keys(variables)
+      .filter((key) => key.startsWith("owner"))
+      .map((key) => `${variables[key]}/${variables[key.replace("owner", "name")]}#${variables[key.replace("owner", "number")]}`);
+    expect(asked.toSorted()).toEqual(["owner-1/repo-2#1", "owner-1/repo-2#12"]);
+  });
+
+  it("asks GitHub for no Ticket when no PR names one", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], repliesFull, GITHUB_TRACKER);
+
+    await stunt(github).check();
+
+    expect(github.ticketCalls).toEqual([]);
+  });
+
+  it("links a PR by its first Closes or Part of line, in any case, and by no other mention of an issue", async () => {
+    const response = structuredClone(assignedFull);
+    withBody("Fixes #12\n\nThis closes #12, see Closes #12.\n\n- Closes #12\n\nCloses owner-1/repo-2#12\n")(
+      response.data.assigned.nodes.find((pr) => pr.number === 10420) as object,
+    );
+    withBody("## What\n\nPart of #1\nCloses #12\n")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
+    withBody("closes #12\n")(response.data.assigned.nodes.find((pr) => pr.number === 9968) as object);
+    const github = fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, {
+      "owner-1/repo-2#1": PARENTLESS,
+      "owner-1/repo-2#12": PARENTED,
+    });
+    const app = stunt(github);
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968, 10412) },
+      { feature: null, prs: rows("owner-1/repo-2", 10420) },
+    ]);
+  });
+
+  it("leaves a PR Unfiled when GitHub does not find the issue its body names", async () => {
+    const response = withPR(10420, withBody("Closes #99999"));
+    const app = stunt(
+      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, { "owner-1/repo-2#99999": NOT_FOUND }),
+    );
+
+    await app.check();
+
+    expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
+      { feature: null, prs: rows("owner-1/repo-2", 10420, 10412, 9968) },
+    ]);
+  });
+
+  it("fails a check on any other GitHub error reading Tickets", async () => {
+    const response = withPR(10420, withBody("Closes #12"));
+    const github = fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER);
+    const answer = github.graphql;
+    github.graphql = async (query, variables) => {
+      if (query.startsWith("query Tickets")) return { errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] };
+      return answer(query, variables);
+    };
+
+    await expect(stunt(github).check()).rejects.toThrow("API rate limit exceeded");
   });
 });
 

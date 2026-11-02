@@ -3,10 +3,11 @@
 import { ChevronRight } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import type { AssignedPRRow, ReviewRow, ReviewStatus } from "../stunt/page-model.ts";
+import type { AssignedPRGroup, AssignedPRRow, ReviewRow, ReviewStatus } from "../stunt/page-model.ts";
 import { Badge } from "./badge.tsx";
+import { FeatureGroups } from "./feature-groups.tsx";
 
 const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"], string> = {
   "review required": "border-border text-muted-foreground",
@@ -16,9 +17,10 @@ const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"], string> = {
   dismissed: "border-border text-muted-foreground line-through",
 };
 
-// A repository's Assigned PRs. Opening a row shows each reviewer's latest
-// review and who a review is still requested from.
-export function AssignedPRTable({ prs }: { prs: AssignedPRRow[] }) {
+// A repository's Assigned PRs, under their Feature headings. Opening a row
+// shows each reviewer's latest review and who a review is still requested
+// from.
+export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
 
   const toggle = (number: number) => {
@@ -30,8 +32,10 @@ export function AssignedPRTable({ prs }: { prs: AssignedPRRow[] }) {
   };
 
   return (
-    <Table>
-      <TableHeader>
+    <FeatureGroups
+      groups={groups}
+      columns={7}
+      header={
         <TableRow>
           <TableHead className="w-8" />
           <TableHead className="w-20">PR</TableHead>
@@ -41,9 +45,9 @@ export function AssignedPRTable({ prs }: { prs: AssignedPRRow[] }) {
           <TableHead className="text-right">Tasks</TableHead>
           <TableHead className="text-right">Updated</TableHead>
         </TableRow>
-      </TableHeader>
-      <TableBody>
-        {prs.map((pr) => {
+      }
+      rows={(prs) =>
+        prs.map((pr) => {
           const expanded = open.has(pr.number);
           return (
             <Fragment key={pr.number}>
@@ -99,9 +103,9 @@ export function AssignedPRTable({ prs }: { prs: AssignedPRRow[] }) {
               )}
             </Fragment>
           );
-        })}
-      </TableBody>
-    </Table>
+        })
+      }
+    />
   );
 }
 
