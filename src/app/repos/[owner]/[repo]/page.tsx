@@ -36,7 +36,12 @@ export default async function RepositoryPage({
         {repository === undefined || repository.assignedPRs.length === 0 ? (
           <p className="text-muted-foreground">No Assigned PRs in {name}.</p>
         ) : (
-          <AssignedPRTable prs={repository.assignedPRs} />
+          repository.assignedPRs.map((group) => (
+            <div key={group.feature ?? "Unfiled"} className="flex flex-col gap-1">
+              <h3 className="text-sm font-medium text-muted-foreground">{group.feature ?? "Unfiled"}</h3>
+              <AssignedPRTable prs={group.prs} />
+            </div>
+          ))
         )}
       </section>
       <section className="flex flex-col gap-2">

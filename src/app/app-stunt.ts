@@ -6,14 +6,15 @@ import type { Notification } from "../stunt/notifications.ts";
 import { openStunt } from "../stunt/stunt.ts";
 
 // The app's entry into stunt: the gh CLI's github.com account, the config
-// under ~/.config/stunt/, the state under ~/.local/share/stunt/, and the real
-// clock.
+// under ~/.config/stunt/, the state under ~/.local/share/stunt/, the clones
+// under ~/repos unless the config says otherwise, and the real clock.
 export function appStunt() {
   const home = homedir();
   return openStunt({
     github: ghClient(),
     dataDir: defaultDataDir(home),
     configPath: defaultConfigPath(home),
+    home,
     clock: { now: () => new Date() },
   });
 }

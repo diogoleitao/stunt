@@ -87,11 +87,12 @@ function newTask(pr: Pick<Task, "repository" | "number" | "title" | "url">, chec
   return { repository, number, title, url, createdAt: checkedAt, state: "open" as const };
 }
 
-// The state after a check at `checkedAt` that saw `checked`. The first check
-// ever records the Baseline. Open Tasks follow what their PRs look like now,
+// The state after a check at `checkedAt` that saw `checked`, but for the
+// Issue trackers, which the check reads apart. The first check ever records
+// the Baseline. Open Tasks follow what their PRs look like now,
 // then each Review inbox PR's latest Review request and each new activity on
 // an Assigned PR becomes a Task once.
-export function applyCheck(state: State, checked: Checked, checkedAt: string): State {
+export function applyCheck(state: State, checked: Checked, checkedAt: string): Omit<State, "issueTrackers"> {
   const tracked = new Map(checked.tracked.map((pr) => [prKey(pr), pr]));
   const tasks = state.tasks.map((task) => {
     const pr = task.state === "open" ? tracked.get(prKey(task)) : undefined;

@@ -1,5 +1,6 @@
 import type { State } from "../data/store.ts";
 import type { AssignedPR, Review, ReviewInboxPR } from "../github/prs.ts";
+import type { IssueTracker } from "./issue-trackers.ts";
 import { requestTime, type Task, taskActor, taskTime } from "./tasks.ts";
 
 export type ReviewStatus = "review required" | "approved" | "changes requested";
@@ -17,6 +18,13 @@ export type AssignedPRRow = {
   reviews: ReviewRow[];
   // Who a review is still requested from: user logins and team slugs.
   pendingReviewers: string[];
+};
+
+// Assigned PRs under the Feature they ship. Every PR is Unfiled until
+// Feature grouping lands, so the Feature is always null for now.
+export type AssignedPRGroup = {
+  feature: null;
+  prs: AssignedPRRow[];
 };
 
 export type ReviewRow = {
@@ -66,11 +74,15 @@ export type TaskRow = {
 
 export type RepositoryModel = {
   name: string;
+  // The Issue tracker its PRs are grouped by, null when it declares none
+  // stunt groups by, which leaves every PR Unfiled.
+  issueTracker: IssueTracker | null;
   // How many open Tasks, Assigned PRs, and Review inbox PRs it holds.
   counts:{ tasks: number; assignedPRs: number; reviewInbox: number };
   // Grouped by PR, the PR with the oldest Task first.
   tasks: TaskGroup[];
-  assignedPRs: AssignedPRRow[];
+  // Grouped by Feature, Unfiled last, most recently updated first in each.
+  assignedPRs: AssignedPRGroup[];
   // Oldest request first.
   reviewInbox: ReviewInboxRow[];
 };
@@ -178,6 +190,35 @@ function taskGroups(tasks: Task[], now: Date): TaskGroup[] {
   return [...groups.values()];
 }
 
+// An Assigned PR's row, counting its open Tasks among the repository's
+// `tasks`.
+function assignedPRRow(pr: AssignedPR, tasks: Task[], now: Date): AssignedPRRow {
+  const reviews = standingReviews(pr);
+  return {
+    number: pr.number,
+    title: pr.title,
+    url: pr.url,
+    author: pr.author,
+    draft: pr.draft,
+    reviewStatus: reviewStatus(pr, reviews),
+    openTasks: tasks.filter((task) => task.number === pr.number).length,
+    updatedAgo: timeAgo(pr.updatedAt, now),
+    reviews: reviews
+      .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
+      .map((review) => ({
+        reviewer: review.author,
+        state: REVIEW_STATES[review.state],
+        submittedAgo: timeAgo(review.submittedAt, now),
+      })),
+    pendingReviewers: pr.pendingReviewers,
+  };
+}
+
+// Every PR under Unfiled, and no group when there are none.
+function unfiled(prs: AssignedPRRow[]): AssignedPRGroup[] {
+  return prs.length === 0 ? [] : [{ feature: null, prs }];
+}
+
 export function pageModel(state: State, now: Date): PageModel {
   const repositories = repositoryNames(state).map((name): RepositoryModel => {
     const tasks = openTasks(state).filter((task) => task.repository === name);
@@ -185,31 +226,14 @@ export function pageModel(state: State, now: Date): PageModel {
     const reviewInbox = state.reviewInbox.filter((pr) => pr.repository === name);
     return {
       name,
+      issueTracker: state.issueTrackers[name] ?? null,
       counts: { tasks: tasks.length, assignedPRs: assignedPRs.length, reviewInbox: reviewInbox.length },
       tasks: taskGroups(tasks, now),
-      assignedPRs: assignedPRs
-        .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-        .map((pr) => {
-          const reviews = standingReviews(pr);
-          return {
-            number: pr.number,
-            title: pr.title,
-            url: pr.url,
-            author: pr.author,
-            draft: pr.draft,
-            reviewStatus: reviewStatus(pr, reviews),
-            openTasks: tasks.filter((task) => task.number === pr.number).length,
-            updatedAgo: timeAgo(pr.updatedAt, now),
-            reviews: reviews
-              .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
-              .map((review) => ({
-                reviewer: review.author,
-                state: REVIEW_STATES[review.state],
-                submittedAgo: timeAgo(review.submittedAt, now),
-              })),
-            pendingReviewers: pr.pendingReviewers,
-          };
-        }),
+      assignedPRs: unfiled(
+        assignedPRs
+          .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+          .map((pr) => assignedPRRow(pr, tasks, now)),
+      ),
       reviewInbox: reviewInbox
         .toSorted((a, b) => requestTime(a) - requestTime(b))
         .map((pr) => ({

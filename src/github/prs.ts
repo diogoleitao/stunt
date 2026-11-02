@@ -1,4 +1,5 @@
 import type { GitHubClient } from "./client.ts";
+import { dataOf, type GraphQLError, repositoryParameters, repositoryVariables } from "./graphql.ts";
 
 export type AssignedPR = {
   repository: string;
@@ -85,7 +86,7 @@ export type TrackedPR = PRRef & {
 // is followed by querying only its own search.
 function checkQuery(lookups: number): string {
   const indexes = Array.from({ length: lookups }, (_, i) => i);
-  const variables = indexes.map((i) => `, $owner${i}: String!, $name${i}: String!, $number${i}: Int!`).join("");
+  const variables = repositoryParameters(lookups) + indexes.map((i) => `, $number${i}: Int!`).join("");
   const tracked = indexes
     .map(
       (i) => `
@@ -231,22 +232,10 @@ type CheckData = {
   [lookup: `tracked${number}`]: { pullRequest: InboxNode | null } | null | undefined;
 };
 
-type GraphQLError = { message: string; type?: string; path?: (string | number)[] };
-
 // A looked up PR GitHub no longer finds, because it or its repository was
 // deleted or the viewer lost access, is no error: its lookup is null.
 function isLookupNotFound(error: GraphQLError): boolean {
   return error.type === "NOT_FOUND" && /^tracked\d+$/.test(String(error.path?.[0]));
-}
-
-// A response's data, failing on any error but those `ignored`.
-function dataOf<Data>(body: unknown, ignored: (error: GraphQLError) => boolean = () => false): Data | undefined {
-  const { data, errors = [] } = body as { data?: Data; errors?: GraphQLError[] };
-  const failures = errors.filter((error) => !ignored(error));
-  if (failures.length > 0) {
-    throw new Error(`GitHub GraphQL query failed: ${failures.map((error) => error.message).join("; ")}`);
-  }
-  return data;
 }
 
 function decode(body: unknown): CheckData {
@@ -455,16 +444,10 @@ function trackedPR(
 }
 
 function lookupVariables(lookups: PRRef[]): Record<string, unknown> {
-  return Object.fromEntries(
-    lookups.flatMap(({ repository, number }, i) => {
-      const [owner, name] = repository.split("/");
-      return [
-        [`owner${i}`, owner],
-        [`name${i}`, name],
-        [`number${i}`, number],
-      ];
-    }),
-  );
+  return {
+    ...repositoryVariables(lookups.map((lookup) => lookup.repository)),
+    ...Object.fromEntries(lookups.map(({ number }, i) => [`number${i}`, number])),
+  };
 }
 
 export type CheckedPRs = {

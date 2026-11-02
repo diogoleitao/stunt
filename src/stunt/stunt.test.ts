@@ -15,6 +15,10 @@ import inboxFull from "./fixtures/review-inbox.json" with { type: "json" };
 // Recorded and stripped the same way, by the query for the inline comments of
 // every recorded review with no body that only comments.
 import repliesFull from "./fixtures/replies.json" with { type: "json" };
+// Recorded and stripped the same way, by the query for the Issue tracker
+// declaration on the default branch of a repository that has one, of one that
+// has none, and of one GitHub does not find.
+import declarationsFull from "./fixtures/declarations.json" with { type: "json" };
 
 const NOW = new Date("2026-11-01T12:00:00Z");
 
@@ -33,14 +37,43 @@ type GraphQLCall = { query: string; variables: Record<string, unknown> };
 // A response body, or a function giving the body for a query's variables.
 type Response = unknown | ((variables: Record<string, unknown>) => unknown);
 
+// A repository's answer to the query for its Issue tracker declaration.
+type Declaration = (typeof declarationsFull)["data"]["repository0" | "repository1"] | "not found";
+
+// The recorded answer of a repository with a declaration on its default
+// branch, one with none, and one GitHub does not find.
+const DECLARED = declarationsFull.data.repository0;
+const UNDECLARED = declarationsFull.data.repository1;
+const NOT_FOUND = "not found";
+
 // Replays recorded response bodies in order, one per check query. A query for
-// reviews' inline comments, by their ids, is answered from `replies`.
-function fakeGitHub(responses: Response[], replies = repliesFull): GitHubClient & { calls: GraphQLCall[] } {
+// reviews' inline comments, by their ids, is answered from `replies`. A query
+// for Issue tracker declarations on default branches is answered from
+// `declarations`, by repository, a repository left out having none; those
+// queries are kept apart in `declarationCalls`.
+function fakeGitHub(
+  responses: Response[],
+  replies = repliesFull,
+  declarations: Record<string, Declaration> = {},
+): GitHubClient & { calls: GraphQLCall[]; declarationCalls: GraphQLCall[] } {
   const queue = [...responses];
   const calls: GraphQLCall[] = [];
+  const declarationCalls: GraphQLCall[] = [];
   return {
     calls,
+    declarationCalls,
     async graphql(query, variables) {
+      if (query.startsWith("query Declarations")) {
+        declarationCalls.push({ query, variables });
+        const data: Record<string, unknown> = {};
+        const errors: unknown[] = [];
+        for (let i = 0; `owner${i}` in variables; i++) {
+          const declaration = declarations[`${variables[`owner${i}`]}/${variables[`name${i}`]}`] ?? UNDECLARED;
+          data[`repository${i}`] = declaration === NOT_FOUND ? null : declaration;
+          if (declaration === NOT_FOUND) errors.push({ ...declarationsFull.errors[0], path: [`repository${i}`] });
+        }
+        return structuredClone(errors.length === 0 ? { data } : { data, errors });
+      }
       calls.push({ query, variables });
       if (Array.isArray(variables.ids)) {
         const nodes = variables.ids.map((id) => {
@@ -61,13 +94,37 @@ function configPath() {
   return path.join(dir, "config", "config.json");
 }
 
+// The home directory, whose `repos` is the default clone root.
+function home() {
+  return path.join(dir, "home");
+}
+
 function stunt(github: GitHubClient, now = NOW) {
   return openStunt({
     github,
     dataDir: path.join(dir, "data"),
     configPath: configPath(),
+    home: home(),
     clock: { now: () => now },
   });
+}
+
+// Makes a local clone at `at` whose `origin` is `url`, holding `declaration`
+// as its Issue tracker declaration when given.
+async function clone(at: string, url: string, declaration?: string) {
+  await mkdir(path.join(at, ".git"), { recursive: true });
+  await writeFile(
+    path.join(at, ".git", "config"),
+    `[core]\n\trepositoryformatversion = 0\n\tbare = false\n[remote "origin"]\n\turl = ${url}\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n[branch "main"]\n\tremote = origin\n\tmerge = refs/heads/main\n`,
+  );
+  if (declaration === undefined) return;
+  await mkdir(path.join(at, "docs", "agents"), { recursive: true });
+  await writeFile(path.join(at, "docs", "agents", "issue-tracker.md"), declaration);
+}
+
+// Each repository's Issue tracker in `model`, by name.
+function issueTrackers(model: Awaited<ReturnType<typeof modelOf>>) {
+  return Object.fromEntries(model.repositories.map((repository) => [repository.name, repository.issueTracker]));
 }
 
 // What the app keeps on disk.
@@ -201,7 +258,7 @@ function requested(actor: string, reviewer: string, createdAt: string) {
 // PRs in `assigned`.
 async function rowOf(assigned: Recorded, number: number) {
   const row = (await modelOf(checkResponse(assigned))).repositories
-    .flatMap((repository) => repository.assignedPRs)
+    .flatMap((repository) => repository.assignedPRs.flatMap((group) => group.prs))
     .find((pr) => pr.number === number);
   if (row === undefined) throw new Error(`no Assigned PR row for #${number}`);
   return row;
@@ -225,10 +282,17 @@ async function modelOf(response: unknown) {
     github: fakeGitHub([response]),
     dataDir: await mkdtemp(path.join(dir, "reference-")),
     configPath: configPath(),
+    home: home(),
     clock: { now: () => NOW },
   });
   await reference.check();
   return reference.pageModel();
+}
+
+// Assigned PR rows grouped as a repository with no Feature shows them: all
+// under Unfiled.
+function unfiled<Row>(...prs: Row[]) {
+  return [{ feature: null, prs }];
 }
 
 // The page model after one check of assigned-prs-full.json at NOW.
@@ -237,10 +301,12 @@ const ALL_ASSIGNED = {
   repositories: [
     {
       name: "owner-1/repo-1",
+      // No clone and no declaration on GitHub: every Assigned PR is Unfiled.
+      issueTracker: null,
       counts: { tasks: 0, assignedPRs: 1, reviewInbox: 0 },
       tasks: [],
       reviewInbox: [],
-      assignedPRs: [
+      assignedPRs: unfiled(
         {
           number: 136,
           title: "Assigned PR 1",
@@ -253,14 +319,15 @@ const ALL_ASSIGNED = {
           reviews: [{ reviewer: "user-2", state: "changes requested", submittedAgo: "2 months ago" }],
           pendingReviewers:[],
         },
-      ],
+      ),
     },
     {
       name: "owner-1/repo-2",
+      issueTracker: null,
       counts: { tasks: 0, assignedPRs: 3, reviewInbox: 0 },
       tasks: [],
       reviewInbox: [],
-      assignedPRs: [
+      assignedPRs: unfiled(
         {
           number: 10420,
           title: "Assigned PR 3",
@@ -300,14 +367,15 @@ const ALL_ASSIGNED = {
           ],
           pendingReviewers:[],
         },
-      ],
+      ),
     },
     {
       name: "owner-1/repo-3",
+      issueTracker: null,
       counts: { tasks: 0, assignedPRs: 1, reviewInbox: 0 },
       tasks: [],
       reviewInbox: [],
-      assignedPRs: [
+      assignedPRs: unfiled(
         // Assigned PRs include drafts.
         {
           number: 381,
@@ -321,16 +389,17 @@ const ALL_ASSIGNED = {
           reviews: [],
           pendingReviewers:[],
         },
-      ],
+      ),
     },
     {
       name: "owner-2/repo-4",
+      issueTracker: null,
       counts: { tasks: 0, assignedPRs: 3, reviewInbox: 0 },
       tasks: [],
       reviewInbox: [],
       // Reviewed after NOW, by when they were recorded, so those times read
       // as just now.
-      assignedPRs: [
+      assignedPRs: unfiled(
         {
           number: 28,
           title: "Assigned PR 8",
@@ -367,7 +436,7 @@ const ALL_ASSIGNED = {
           reviews: [{ reviewer: "user-2", state: "approved", submittedAgo: "21 hours ago" }],
           pendingReviewers:[],
         },
-      ],
+      ),
     },
   ],
   allTasks: [],
@@ -422,7 +491,7 @@ describe("a check", () => {
       "owner-1/repo-2",
       "owner-1/repo-3",
     ]);
-    expect(repositories[1].assignedPRs.map((pr) => pr.number)).toEqual([10420, 9968]);
+    expect(repositories[1].assignedPRs.flatMap((group) => group.prs).map((pr) => pr.number)).toEqual([10420, 9968]);
   });
 
   it("drops a PR the search still returns after it was merged or closed", async () => {
@@ -1329,7 +1398,9 @@ describe("activity Tasks on Assigned PRs", () => {
     const [, pr27] = tasksOf(await app.pageModel(), "owner-2/repo-4");
     await app.markDone(pr27.tasks[0].id);
 
-    const rows = (await app.pageModel()).repositories.flatMap((repository) => repository.assignedPRs);
+    const rows = (await app.pageModel()).repositories.flatMap((repository) =>
+      repository.assignedPRs.flatMap((group) => group.prs),
+    );
     expect(Object.fromEntries(rows.map((row) => [row.number, row.openTasks]))).toEqual({
       28: 1,
       27: 0,
@@ -1595,6 +1666,159 @@ describe("Notifications", () => {
         body: "#10419",
       },
     ]);
+  });
+});
+
+describe("the Issue tracker", () => {
+  // The Issue tracker declarations of the clones below.
+  const GITHUB = DECLARED.object.text;
+  const LOCAL_MARKDOWN = "---\nstatus: instructional\n---\n\n# Issue tracker: Local Markdown\n\nIssues and specs for this repo live as markdown files in `.scratch/`.\n";
+  const GITLAB = "# Issue tracker: GitLab\n\nIssues and merge requests for this repo live in GitLab, via the `glab` CLI.\n";
+
+  // ALL_ASSIGNED with each repository's Issue tracker from `trackers`.
+  function allAssignedWith(trackers: Record<string, string | null>) {
+    return {
+      ...ALL_ASSIGNED,
+      repositories: ALL_ASSIGNED.repositories.map((repository) => ({
+        ...repository,
+        issueTracker: trackers[repository.name],
+      })),
+    };
+  }
+
+  it("is read from the title of the declaration in each repository's clone under ~/repos, matched by its origin, every Assigned PR still Unfiled", async () => {
+    const root = path.join(home(), "repos");
+    await clone(path.join(root, "owner-1", "repo-1"), "git@github.com:owner-1/repo-1.git", GITHUB);
+    await clone(path.join(root, "two"), "https://github.com/owner-1/repo-2.git", LOCAL_MARKDOWN);
+    await clone(path.join(root, "work", "team", "three"), "ssh://git@github.com/Owner-1/Repo-3", GITLAB);
+    // A missing declaration in a clone is not looked for on GitHub.
+    await clone(path.join(root, "owner-2", "repo-4"), "git@github.com:owner-2/repo-4.git");
+    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, { "owner-2/repo-4": DECLARED });
+    const app = stunt(github);
+
+    await app.check();
+
+    expect(await app.pageModel()).toEqual(
+      allAssignedWith({
+        "owner-1/repo-1": "GitHub",
+        "owner-1/repo-2": "Local Markdown",
+        "owner-1/repo-3": null,
+        "owner-2/repo-4": null,
+      }),
+    );
+    expect(github.declarationCalls).toEqual([]);
+  });
+
+  it("is read from clones under the clone root set in the config, which may start at ~", async () => {
+    await writeConfig({ cloneRoot: "~/code" });
+    await clone(path.join(home(), "code", "repo-1"), "git@github.com:owner-1/repo-1.git", GITHUB);
+    // Not under the configured root, so not found.
+    await clone(path.join(home(), "repos", "repo-2"), "git@github.com:owner-1/repo-2.git", LOCAL_MARKDOWN);
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(issueTrackers(await app.pageModel())).toEqual({
+      "owner-1/repo-1": "GitHub",
+      "owner-1/repo-2": null,
+      "owner-1/repo-3": null,
+      "owner-2/repo-4": null,
+    });
+  });
+
+  it("is read from the clone the config names for a repository, outside the clone root or over a clone the scan finds", async () => {
+    const outside = path.join(dir, "elsewhere");
+    await writeConfig({
+      clones: {
+        "owner-1/repo-1": path.join(outside, "one"),
+        "Owner-2/Repo-4": path.join(outside, "four"),
+      },
+    });
+    await clone(path.join(outside, "one"), "git@github.com:owner-1/repo-1.git", LOCAL_MARKDOWN);
+    await clone(path.join(home(), "repos", "repo-1"), "git@github.com:owner-1/repo-1.git", GITHUB);
+    await clone(path.join(outside, "four"), "git@github.com:owner-2/repo-4.git", GITHUB);
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(issueTrackers(await app.pageModel())).toEqual({
+      "owner-1/repo-1": "Local Markdown",
+      "owner-1/repo-2": null,
+      "owner-1/repo-3": null,
+      "owner-2/repo-4": "GitHub",
+    });
+  });
+
+  it("is read from the scan, or else GitHub, when the clone the config names is not a clone, warning about it", async () => {
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const missing = path.join(dir, "elsewhere", "one");
+    await writeConfig({ clones: { "owner-1/repo-1": missing, "owner-1/repo-2": path.join(dir, "elsewhere", "two") } });
+    await clone(path.join(home(), "repos", "repo-1"), "git@github.com:owner-1/repo-1.git", LOCAL_MARKDOWN);
+    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, { "owner-1/repo-2": DECLARED });
+    const app = stunt(github);
+
+    await app.check();
+
+    expect(issueTrackers(await app.pageModel())).toMatchObject({
+      "owner-1/repo-1": "Local Markdown",
+      "owner-1/repo-2": "GitHub",
+    });
+    expect(warned).toHaveBeenCalledWith(`stunt: the clone of owner-1/repo-1 in the config, ${missing}, is not a git clone`);
+    warned.mockRestore();
+  });
+
+  it("is read from the GitHub default branch of each repository without a clone, in one query", async () => {
+    await clone(path.join(home(), "repos", "repo-1"), "git@github.com:owner-1/repo-1.git", GITHUB);
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], repliesFull, {
+      "owner-1/repo-1": UNDECLARED,
+      // owner-1/repo-2 has no declaration on GitHub either.
+      "owner-1/repo-3": NOT_FOUND,
+      "owner-2/repo-4": {
+        object: { text: DECLARED.object.text.replace("# Issue tracker: GitHub", "# Issue tracker: GitLab") },
+      },
+      "owner-1/repo-5": DECLARED,
+    });
+    const app = stunt(github);
+
+    await app.check();
+
+    expect(issueTrackers(await app.pageModel())).toEqual({
+      "owner-1/repo-1": "GitHub",
+      "owner-1/repo-2": null,
+      "owner-1/repo-3": null,
+      "owner-2/repo-4": null,
+      "owner-1/repo-5": "GitHub",
+    });
+    expect(github.declarationCalls).toHaveLength(1);
+    const { variables } = github.declarationCalls[0];
+    const asked = Object.keys(variables)
+      .filter((key) => key.startsWith("owner"))
+      .map((key) => `${variables[key]}/${variables[key.replace("owner", "name")]}`);
+    expect(asked.toSorted()).toEqual(["owner-1/repo-2", "owner-1/repo-3", "owner-1/repo-5", "owner-2/repo-4"]);
+  });
+
+  it("fails a check on any other GitHub error reading a declaration", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull)]);
+    github.graphql = async (query, variables) => {
+      if (query.startsWith("query Declarations")) return { errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] };
+      return fakeGitHub([checkResponse(assignedFull)]).graphql(query, variables);
+    };
+
+    await expect(stunt(github).check()).rejects.toThrow("API rate limit exceeded");
+  });
+
+  it.each([
+    [{ cloneRoot: "repos" }, "cloneRoot must be an absolute path or start at ~/"],
+    [{ cloneRoot: 7 }, "cloneRoot must be an absolute path or start at ~/"],
+    [{ clones: ["/repos/repo-1"] }, 'clones must map each "owner/repo" to an absolute path or one starting at ~/'],
+    [{ clones: { "repo-1": "/repos/repo-1" } }, 'clones must map each "owner/repo" to an absolute path or one starting at ~/'],
+    [{ clones: { "owner-1/repo-1": "repo-1" } }, 'clones must map each "owner/repo" to an absolute path or one starting at ~/'],
+  ])("fails a check when the config holds %j, naming the config file", async (config, message) => {
+    await writeConfig(config);
+
+    await expect(stunt(fakeGitHub([checkResponse(assignedFull)])).check()).rejects.toThrow(
+      `config file ${configPath()}: ${message}`,
+    );
   });
 });
 

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { ifExists, writeFileAtomically } from "../fs.ts";
 import type { CheckedPRs } from "../github/prs.ts";
+import type { IssueTracker } from "../stunt/issue-trackers.ts";
 import type { Task } from "../stunt/tasks.ts";
 
 // What the last check saw, the Baseline, and every Task ever made, done and
@@ -11,9 +12,12 @@ export type State = CheckedPRs & {
   checkedAt?: string;
   baseline?: string;
   tasks: Task[];
+  // The Issue tracker of each repository the last check saw that declares
+  // one stunt groups by.
+  issueTrackers: Record<string, IssueTracker>;
 };
 
-const EMPTY: State = { assignedPRs: [], reviewInbox: [], tasks: [] };
+const EMPTY: State = { assignedPRs: [], reviewInbox: [], tasks: [], issueTrackers: {} };
 
 export function defaultDataDir(home: string): string {
   return path.join(home, ".local", "share", "stunt");
@@ -30,7 +34,8 @@ export function openStore(dataDir: string) {
   async function load(): Promise<State> {
     const text = await ifExists(readFile(statePath, "utf8"));
     if (text === undefined) return EMPTY;
-    // A state saved before the Review inbox or Tasks existed has none.
+    // A state saved before the Review inbox, Tasks, or Issue trackers existed
+    // has none.
     return { ...EMPTY, ...(JSON.parse(text) as Partial<State>) };
   }
 

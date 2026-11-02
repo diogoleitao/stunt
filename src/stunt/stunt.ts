@@ -2,6 +2,7 @@ import { readConfig } from "../config/config.ts";
 import { openStore } from "../data/store.ts";
 import type { GitHubClient } from "../github/client.ts";
 import { fetchPRs } from "../github/prs.ts";
+import { readIssueTrackers } from "./issue-trackers.ts";
 import { type Notification, notifications } from "./notifications.ts";
 import { type PageModel, pageModel } from "./page-model.ts";
 import { applyCheck, type Task, trackedPRs, withTasksDone } from "./tasks.ts";
@@ -12,25 +13,31 @@ export type StuntOptions = {
   github: GitHubClient;
   dataDir: string;
   configPath: string;
+  // The home directory, which holds the default clone root.
+  home: string;
   clock: Clock;
 };
 
-export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) {
+export function openStunt({ github, dataDir, configPath, home, clock }: StuntOptions) {
   const store = openStore(dataDir);
 
-  // Asks GitHub once for what changed, stores what it saw, and turns new
-  // activity into Tasks. Resolves to the Notifications announcing them.
+  // Asks GitHub once for what changed, reads the Issue tracker of each
+  // repository it saw, stores what it saw, and turns new activity into
+  // Tasks. Resolves to the Notifications announcing them.
   async function check(): Promise<Notification[]> {
     const checkedAt = clock.now().toISOString();
+    const config = await readConfig(configPath, home);
     const { tasks, baseline } = await store.load();
     const prs = await fetchPRs(github, {
       lookups: trackedPRs(tasks),
       since: baseline,
       known: new Set(tasks.map((task) => task.id)),
     });
+    const repositories = new Set([...prs.assignedPRs, ...prs.reviewInbox].map((pr) => pr.repository));
+    const issueTrackers = await readIssueTrackers(github, [...repositories], config);
     let created: Task[] = [];
     await store.update((state) => {
-      const next = applyCheck(state, prs, checkedAt);
+      const next = { ...applyCheck(state, prs, checkedAt), issueTrackers };
       const known = new Set(state.tasks.map((task) => task.id));
       created = next.tasks.filter((task) => !known.has(task.id));
       return next;
@@ -57,7 +64,7 @@ export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) 
     // `onChecked`, is logged and the next check runs on time. Resolves to a
     // function that stops checking.
     async start(onChecked: (notifications: Notification[]) => void = () => {}): Promise<() => void> {
-      const { checkIntervalSeconds } = await readConfig(configPath);
+      const { checkIntervalSeconds } = await readConfig(configPath, home);
       let stopped = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
