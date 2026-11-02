@@ -1,5 +1,8 @@
 {
   "data": {
+    "viewer": {
+      "login": "user-1"
+    },
     "assigned": {
       "pageInfo": {
         "hasNextPage": false,
@@ -25,6 +28,9 @@
           },
           "reviewRequests": {
             "nodes": []
+          },
+          "comments": {
+            "nodes": []
           }
         },
         {
@@ -47,20 +53,41 @@
                 "state": "APPROVED",
                 "submittedAt": "2026-09-08T12:40:50Z",
                 "author": {
-                  "login": "user-3"
-                }
+                  "login": "user-3",
+                  "__typename": "User"
+                },
+                "id": "review-22",
+                "url": "https://github.com/owner-1/repo-2/pull/9968#pullrequestreview-5141777413",
+                "body": ""
               },
               {
                 "state": "CHANGES_REQUESTED",
                 "submittedAt": "2026-09-08T12:58:31Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-23",
+                "url": "https://github.com/owner-1/repo-2/pull/9968#pullrequestreview-5141978008",
+                "body": "Review body."
               }
             ]
           },
           "reviewRequests": {
             "nodes": []
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-3",
+                "url": "https://github.com/owner-1/repo-2/pull/9968#issuecomment-5574154413",
+                "createdAt": "2026-09-07T17:53:53Z",
+                "author": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
           }
         },
         {
@@ -83,12 +110,19 @@
                 "state": "CHANGES_REQUESTED",
                 "submittedAt": "2026-08-19T09:35:48Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-24",
+                "url": "https://github.com/owner-1/repo-1/pull/136#pullrequestreview-4970675684",
+                "body": "Review body."
               }
             ]
           },
           "reviewRequests": {
+            "nodes": []
+          },
+          "comments": {
             "nodes": []
           }
         }

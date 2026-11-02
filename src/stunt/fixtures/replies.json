@@ -1,0 +1,175 @@
+{
+  "data": {
+    "nodes": [
+      {
+        "id": "review-4",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-2/repo-4/pull/25#discussion_r4432324515",
+              "replyTo": {
+                "id": "review-comment-12"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-5",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-2/repo-4/pull/25#discussion_r4432324638",
+              "replyTo": {
+                "id": "review-comment-13"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-9",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4411960022",
+              "replyTo": {
+                "id": "review-comment-1"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-10",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4411960307",
+              "replyTo": {
+                "id": "review-comment-2"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-11",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4411960605",
+              "replyTo": {
+                "id": "review-comment-3"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-12",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4411960870",
+              "replyTo": {
+                "id": "review-comment-4"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-13",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4411961131",
+              "replyTo": {
+                "id": "review-comment-5"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-14",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4411961372",
+              "replyTo": {
+                "id": "review-comment-6"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-16",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4414149566",
+              "replyTo": {
+                "id": "review-comment-7"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-17",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4414150161",
+              "replyTo": {
+                "id": "review-comment-8"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-19",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4414380780",
+              "replyTo": {
+                "id": "review-comment-9"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-20",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4414381222",
+              "replyTo": {
+                "id": "review-comment-10"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "review-21",
+        "comments": {
+          "nodes": [
+            {
+              "url": "https://github.com/owner-1/repo-2/pull/10412#discussion_r4414381710",
+              "replyTo": {
+                "id": "review-comment-11"
+              }
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

@@ -43,7 +43,7 @@ _Avoid_: Ungrouped, other, misc
 ### Activity
 
 **Task**:
-One piece of activity on a PR that you acknowledge by marking it done: a Review request, a review, a thread reply, or a conversation comment. A Review request Task is done once you submit a review.
+One piece of activity on a PR that you acknowledge by marking it done: a Review request, a review, a thread reply, or a conversation comment. A Review request Task is done once you submit a review; any other Task is done only once you mark it.
 _Avoid_: Notification, alert, event, to-do
 
 **Expired**:

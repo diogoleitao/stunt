@@ -3,7 +3,7 @@ import { openStore } from "../data/store.ts";
 import type { GitHubClient } from "../github/client.ts";
 import { fetchPRs } from "../github/prs.ts";
 import { type PageModel, pageModel } from "./page-model.ts";
-import { applyCheck, trackedPRs, withTaskDone } from "./tasks.ts";
+import { applyCheck, trackedPRs, withTasksDone } from "./tasks.ts";
 
 export type Clock = { now(): Date };
 
@@ -21,16 +21,22 @@ export function openStunt({ github, dataDir, configPath, clock }: StuntOptions) 
   // activity into Tasks.
   async function check(): Promise<void> {
     const checkedAt = clock.now().toISOString();
-    const prs = await fetchPRs(github, trackedPRs((await store.load()).tasks));
+    const { tasks, baseline } = await store.load();
+    const prs = await fetchPRs(github, {
+      lookups: trackedPRs(tasks),
+      since: baseline,
+      known: new Set(tasks.map((task) => task.id)),
+    });
     await store.update((state) => applyCheck(state, prs, checkedAt));
   }
 
   return {
     check,
 
-    // Marks an open Task done. A Task already done or expired stays as it is.
-    async markDone(id: string): Promise<void> {
-      await store.update((state) => withTaskDone(state, id));
+    // Marks open Tasks done, such as every Task of one PR at once. A Task
+    // already done or expired stays as it is.
+    async markDone(...ids: string[]): Promise<void> {
+      await store.update((state) => withTasksDone(state, ids));
     },
 
     async pageModel(): Promise<PageModel> {

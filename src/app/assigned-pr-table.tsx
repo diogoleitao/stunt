@@ -38,6 +38,7 @@ export function AssignedPRTable({ prs }: { prs: AssignedPRRow[] }) {
           <TableHead>Title</TableHead>
           <TableHead>Author</TableHead>
           <TableHead>Review status</TableHead>
+          <TableHead className="text-right">Tasks</TableHead>
           <TableHead className="text-right">Updated</TableHead>
         </TableRow>
       </TableHeader>
@@ -81,12 +82,17 @@ export function AssignedPRTable({ prs }: { prs: AssignedPRRow[] }) {
                 <TableCell>
                   <Badge className={STATE_STYLES[pr.reviewStatus]}>{pr.reviewStatus}</Badge>
                 </TableCell>
+                <TableCell
+                  className={cn("text-right tabular-nums", pr.openTasks === 0 ? "text-muted-foreground" : "font-medium")}
+                >
+                  {pr.openTasks}
+                </TableCell>
                 <TableCell className="text-right text-muted-foreground">{pr.updatedAgo}</TableCell>
               </TableRow>
               {expanded && (
                 <TableRow className="hover:bg-transparent">
                   <TableCell />
-                  <TableCell colSpan={5} className="whitespace-normal">
+                  <TableCell colSpan={6} className="whitespace-normal">
                     <ReviewDetail pr={pr} />
                   </TableCell>
                 </TableRow>

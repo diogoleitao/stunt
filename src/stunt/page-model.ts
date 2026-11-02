@@ -11,6 +11,7 @@ export type AssignedPRRow = {
   author: string;
   draft: boolean;
   reviewStatus: ReviewStatus;
+  openTasks: number;
   updatedAgo: string;
   // Each reviewer's latest review, most recent first.
   reviews: ReviewRow[];
@@ -55,10 +56,10 @@ export type TaskRow = {
   id: string;
   kind: Task["kind"];
   // Where on GitHub to act on it: a Review request opens the PR's Files
-  // changed tab.
+  // changed tab, any other Task the exact review, reply, or comment.
   url: string;
-  // Who made the request, and how long it has waited. Null when the request
-  // is too old for the check to have read.
+  // Who made the request or posted the activity, and how long ago. Null when
+  // a request is too old for the check to have read.
   by: string | null;
   ago: string | null;
 };
@@ -138,6 +139,25 @@ function requestTime({ request }: Pick<ReviewInboxPR, "request">): number {
   return request === null ? -Infinity : Date.parse(request.waitingSince);
 }
 
+// A Review request Task counts from its request, any other from its activity.
+function taskTime(task: Task): number {
+  return task.kind === "review request" ? requestTime(task) : Date.parse(task.activity.at);
+}
+
+function taskRow(task: Task, now: Date): TaskRow {
+  if (task.kind !== "review request") {
+    const { by, at, url } = task.activity;
+    return { id: task.id, kind: task.kind, url, by, ago: timeAgo(at, now) };
+  }
+  return {
+    id: task.id,
+    kind: task.kind,
+    url: `${task.url}/files`,
+    by: task.request?.by ?? null,
+    ago: task.request === null ? null : timeAgo(task.request.waitingSince, now),
+  };
+}
+
 function openTasks(state: State): Task[] {
   return state.tasks.filter((task) => task.state === "open");
 }
@@ -150,65 +170,60 @@ function repositoryNames(state: State): string[] {
 
 function taskGroups(tasks: Task[], now: Date): TaskGroup[] {
   const groups = new Map<number, TaskGroup>();
-  for (const task of tasks.toSorted((a, b) => requestTime(a) - requestTime(b))) {
+  for (const task of tasks.toSorted((a, b) => taskTime(a) - taskTime(b))) {
     let group = groups.get(task.number);
     if (group === undefined) {
       group = { number: task.number, title: task.title, url: task.url, tasks: [] };
       groups.set(task.number, group);
     }
-    group.tasks.push({
-      id: task.id,
-      kind: task.kind,
-      url: `${task.url}/files`,
-      by: task.request?.by ?? null,
-      ago: task.request === null ? null : timeAgo(task.request.waitingSince, now),
-    });
+    group.tasks.push(taskRow(task, now));
   }
   return [...groups.values()];
 }
 
 export function pageModel(state: State, now: Date): PageModel {
-  const repositories = repositoryNames(state).map((name) => ({
-    name,
-    tasks: taskGroups(
-      openTasks(state).filter((task) => task.repository === name),
-      now,
-    ),
-    assignedPRs: state.assignedPRs
-      .filter((pr) => pr.repository === name)
-      .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
-      .map((pr) => {
-        const reviews = standingReviews(pr);
-        return {
+  const repositories = repositoryNames(state).map((name) => {
+    const tasks = openTasks(state).filter((task) => task.repository === name);
+    return {
+      name,
+      tasks: taskGroups(tasks, now),
+      assignedPRs: state.assignedPRs
+        .filter((pr) => pr.repository === name)
+        .toSorted((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
+        .map((pr) => {
+          const reviews = standingReviews(pr);
+          return {
+            number: pr.number,
+            title: pr.title,
+            url: pr.url,
+            author: pr.author,
+            draft: pr.draft,
+            reviewStatus: reviewStatus(pr, reviews),
+            openTasks: tasks.filter((task) => task.number === pr.number).length,
+            updatedAgo: timeAgo(pr.updatedAt, now),
+            reviews: reviews
+              .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
+              .map((review) => ({
+                reviewer: review.author,
+                state: REVIEW_STATES[review.state],
+                submittedAgo: timeAgo(review.submittedAt, now),
+              })),
+            pendingReviewers: pr.pendingReviewers,
+          };
+        }),
+      reviewInbox: state.reviewInbox
+        .filter((pr) => pr.repository === name)
+        .toSorted((a, b) => requestTime(a) - requestTime(b))
+        .map((pr) => ({
           number: pr.number,
           title: pr.title,
           url: pr.url,
           author: pr.author,
-          draft: pr.draft,
-          reviewStatus: reviewStatus(pr, reviews),
-          updatedAgo: timeAgo(pr.updatedAt, now),
-          reviews: reviews
-            .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
-            .map((review) => ({
-              reviewer: review.author,
-              state: REVIEW_STATES[review.state],
-              submittedAgo: timeAgo(review.submittedAt, now),
-            })),
-          pendingReviewers: pr.pendingReviewers,
-        };
-      }),
-    reviewInbox: state.reviewInbox
-      .filter((pr) => pr.repository === name)
-      .toSorted((a, b) => requestTime(a) - requestTime(b))
-      .map((pr) => ({
-        number: pr.number,
-        title: pr.title,
-        url: pr.url,
-        author: pr.author,
-        request: pr.request === null ? null : { by: pr.request.by, ago: timeAgo(pr.request.waitingSince, now) },
-        reRequest: pr.reRequest,
-      })),
-  }));
+          request: pr.request === null ? null : { by: pr.request.by, ago: timeAgo(pr.request.waitingSince, now) },
+          reRequest: pr.reRequest,
+        })),
+    };
+  });
 
   return { checkedAt: state.checkedAt, repositories };
 }

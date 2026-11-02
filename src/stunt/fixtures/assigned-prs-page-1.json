@@ -1,5 +1,8 @@
 {
   "data": {
+    "viewer": {
+      "login": "user-1"
+    },
     "assigned": {
       "pageInfo": {
         "hasNextPage": true,
@@ -12,26 +15,34 @@
           "isDraft": false,
           "title": "Assigned PR 8",
           "url": "https://github.com/owner-2/repo-4/pull/28",
-          "updatedAt": "2026-10-31T17:18:35Z",
+          "updatedAt": "2026-11-02T09:39:38Z",
           "author": {
             "login": "user-1"
           },
           "repository": {
             "nameWithOwner": "owner-2/repo-4"
           },
-          "reviewDecision": "REVIEW_REQUIRED",
+          "reviewDecision": null,
           "reviews": {
-            "nodes": []
-          },
-          "reviewRequests": {
             "nodes": [
               {
-                "requestedReviewer": {
-                  "__typename": "User",
-                  "login": "user-2"
-                }
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-02T09:39:38Z",
+                "author": {
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-1",
+                "url": "https://github.com/owner-2/repo-4/pull/28#pullrequestreview-5734576152",
+                "body": "Review body."
               }
             ]
+          },
+          "reviewRequests": {
+            "nodes": []
+          },
+          "comments": {
+            "nodes": []
           }
         },
         {
@@ -40,26 +51,34 @@
           "isDraft": false,
           "title": "Assigned PR 7",
           "url": "https://github.com/owner-2/repo-4/pull/27",
-          "updatedAt": "2026-10-31T16:47:06Z",
+          "updatedAt": "2026-11-02T09:16:05Z",
           "author": {
             "login": "user-1"
           },
           "repository": {
             "nameWithOwner": "owner-2/repo-4"
           },
-          "reviewDecision": "REVIEW_REQUIRED",
+          "reviewDecision": null,
           "reviews": {
-            "nodes": []
-          },
-          "reviewRequests": {
             "nodes": [
               {
-                "requestedReviewer": {
-                  "__typename": "User",
-                  "login": "user-2"
-                }
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-02T09:16:05Z",
+                "author": {
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-2",
+                "url": "https://github.com/owner-2/repo-4/pull/27#pullrequestreview-5734293745",
+                "body": "Review body."
               }
             ]
+          },
+          "reviewRequests": {
+            "nodes": []
+          },
+          "comments": {
+            "nodes": []
           }
         },
         {
@@ -68,48 +87,67 @@
           "isDraft": false,
           "title": "Assigned PR 6",
           "url": "https://github.com/owner-2/repo-4/pull/25",
-          "updatedAt": "2026-10-31T15:55:40Z",
+          "updatedAt": "2026-11-02T09:14:42Z",
           "author": {
             "login": "user-1"
           },
           "repository": {
             "nameWithOwner": "owner-2/repo-4"
           },
-          "reviewDecision": "REVIEW_REQUIRED",
+          "reviewDecision": null,
           "reviews": {
             "nodes": [
               {
                 "state": "APPROVED",
                 "submittedAt": "2026-10-31T14:04:37Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-3",
+                "url": "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723093396",
+                "body": "Review body."
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-31T15:55:36Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-4",
+                "url": "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723657779",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-31T15:55:38Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-5",
+                "url": "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723657880",
+                "body": ""
+              },
+              {
+                "state": "COMMENTED",
+                "submittedAt": "2026-11-02T09:14:41Z",
+                "author": {
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-6",
+                "url": "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5734277310",
+                "body": "Review body."
               }
             ]
           },
           "reviewRequests": {
-            "nodes": [
-              {
-                "requestedReviewer": {
-                  "__typename": "User",
-                  "login": "user-2"
-                }
-              }
-            ]
+            "nodes": []
+          },
+          "comments": {
+            "nodes": []
           }
         },
         {
@@ -132,13 +170,30 @@
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-30T17:15:20Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-7",
+                "url": "https://github.com/owner-1/repo-2/pull/10420#pullrequestreview-5715968068",
+                "body": "Review body."
               }
             ]
           },
           "reviewRequests": {
             "nodes": []
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-1",
+                "url": "https://github.com/owner-1/repo-2/pull/10420#issuecomment-6522398983",
+                "createdAt": "2026-10-30T12:07:57Z",
+                "author": {
+                  "__typename": "User",
+                  "login": "user-1"
+                }
+              }
+            ]
           }
         },
         {
@@ -161,99 +216,155 @@
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:32:45Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-8",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5696989019",
+                "body": "Review body."
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:52:11Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-9",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5697213806",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:52:13Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-10",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5697214176",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:52:15Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-11",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5697214531",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:52:17Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-12",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5697214902",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:52:19Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-13",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5697215250",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T11:52:21Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-14",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5697215587",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:01:22Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-15",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5699933592",
+                "body": "Review body."
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:13:27Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-16",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5700130763",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:13:30Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-17",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5700131543",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:23:16Z",
                 "author": {
-                  "login": "user-2"
-                }
+                  "login": "user-2",
+                  "__typename": "User"
+                },
+                "id": "review-18",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5700289046",
+                "body": "Review body."
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:32:29Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-19",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5700440423",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:32:31Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-20",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5700441071",
+                "body": ""
               },
               {
                 "state": "COMMENTED",
                 "submittedAt": "2026-10-29T15:32:34Z",
                 "author": {
-                  "login": "user-1"
-                }
+                  "login": "user-1",
+                  "__typename": "User"
+                },
+                "id": "review-21",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#pullrequestreview-5700441704",
+                "body": ""
               }
             ]
           },
@@ -263,6 +374,19 @@
                 "requestedReviewer": {
                   "__typename": "User",
                   "login": "user-2"
+                }
+              }
+            ]
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-2",
+                "url": "https://github.com/owner-1/repo-2/pull/10412#issuecomment-6500554802",
+                "createdAt": "2026-10-29T15:13:33Z",
+                "author": {
+                  "__typename": "User",
+                  "login": "user-1"
                 }
               }
             ]
