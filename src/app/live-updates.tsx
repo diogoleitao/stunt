@@ -38,7 +38,7 @@ export function LiveUpdates() {
       const shown = new Notification(title, { body, tag: `${sentAt} ${repository}` });
       shown.onclick = () => {
         window.focus();
-        router.push(repositoryHref(repository));
+        router.push(repositoryHref(repository, "review-inbox"));
       };
     }
   });
