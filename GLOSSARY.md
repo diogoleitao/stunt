@@ -1,6 +1,6 @@
 # stunt
 
-A personal alternative to GitHub's pull request interfaces that tracks the review activity on PRs you are involved in, per repository, and turns new activity into tasks.
+A personal alternative to GitHub's pull request interfaces that shows the review state of PRs you are involved in, per repository, and announces new Review requests.
 
 ## Language
 
@@ -17,6 +17,10 @@ _Avoid_: Review assignment
 **Review inbox**:
 The open PRs with a Review request you have not yet acted on by submitting a review.
 _Avoid_: Review queue, to-review list
+
+**Pending review**:
+An Assigned PR someone else authored on which a Review request for you is pending, or which you have never reviewed. An Assigned PR you authored is never Pending review.
+_Avoid_: Needs review, awaiting review, unreviewed
 
 **Review status**:
 A PR's overall review state: review required, approved, or changes requested.
@@ -40,20 +44,8 @@ _Avoid_: Task, story, sub-issue
 The group for PRs that cannot be linked to any Feature.
 _Avoid_: Ungrouped, other, misc
 
-### Activity
-
-**Task**:
-One piece of activity on a PR that you acknowledge by marking it done: a Review request, a review, a thread reply, or a conversation comment. A Review request Task is done once you submit a review; any other Task is done only once you mark it.
-_Avoid_: Notification, alert, event, to-do
-
-**Expired**:
-A Task that ended without being done, because its PR was merged or closed, or its Review request was withdrawn or replaced by a re-request.
-_Avoid_: Dismissed, cancelled
+### Notifications
 
 **Notification**:
-The desktop alert announcing a repository's new Tasks of one kind, such as its new reviews or its new Review requests.
+The desktop alert announcing a repository's new Review requests. Each Review request is announced once.
 _Avoid_: Alert, ping
-
-**Baseline**:
-The moment tracking first started. Reviews and comments from before it never become Tasks; those posted after it always do, even while the app was stopped.
-_Avoid_: Start time, cutoff
