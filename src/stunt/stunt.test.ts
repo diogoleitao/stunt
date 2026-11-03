@@ -530,6 +530,7 @@ const ALL_ASSIGNED = {
       ),
     },
   ],
+  landingRepository: "owner-1/repo-1",
   allTasks: [],
 };
 
@@ -576,13 +577,12 @@ describe("a check", () => {
     await app.check();
 
     const repositories = (await app.pageModel()).repositories;
-    // The second check makes Tasks of owner-2/repo-4's reviews after NOW.
     expect(repositories.map((repository) => repository.name)).toEqual([
-      "owner-2/repo-4",
       "owner-1/repo-2",
       "owner-1/repo-3",
+      "owner-2/repo-4",
     ]);
-    expect(repositories[1].assignedPRs.flatMap((group) => group.prs).map((pr) => pr.number)).toEqual([10420, 9968]);
+    expect(repositories[0].assignedPRs.flatMap((group) => group.prs).map((pr) => pr.number)).toEqual([10420, 9968]);
   });
 
   it("drops a PR the search still returns after it was merged or closed", async () => {
@@ -1254,16 +1254,32 @@ describe("Review request Tasks", () => {
 describe("the sidebar", () => {
   // At the first check, every recorded Review request becomes a Task: 12 in
   // owner-1/repo-5, 4 in owner-1/repo-2, and 1 in owner-1/repo-3.
-  it("lists the repositories with the most open Tasks first, then by name", async () => {
+  it("lists the repositories by name, whatever their open Tasks", async () => {
     const model = await modelOf(checkResponse(assignedFull, inboxFull));
 
     expect(model.repositories.map((repository) => repository.name)).toEqual([
-      "owner-1/repo-5",
+      "owner-1/repo-1",
       "owner-1/repo-2",
       "owner-1/repo-3",
-      "owner-1/repo-1",
+      "owner-1/repo-5",
       "owner-2/repo-4",
     ]);
+  });
+
+  it("lands on the repository with the most open Tasks", async () => {
+    const model = await modelOf(checkResponse(assignedFull, inboxFull));
+
+    expect(model.landingRepository).toBe("owner-1/repo-5");
+  });
+
+  it("lands on the first repository by name when none has more open Tasks than the rest", async () => {
+    const model = await modelOf(checkResponse(assignedFull));
+
+    expect(model.landingRepository).toBe("owner-1/repo-1");
+  });
+
+  it("lands nowhere before the first check", async () => {
+    expect((await stunt(fakeGitHub([])).pageModel()).landingRepository).toBeUndefined();
   });
 
   it("counts each repository's open Tasks, Assigned PRs, and Review inbox PRs", async () => {
@@ -1415,11 +1431,11 @@ describe("activity Tasks on Assigned PRs", () => {
     expect(
       model.repositories.flatMap((repository) => repository.tasks.flatMap((pr) => pr.tasks.map((task) => task.url))),
     ).toEqual([
+      "https://github.com/owner-1/repo-2/pull/10420#pullrequestreview-5715968068",
       "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723093396",
       "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5734277310",
       "https://github.com/owner-2/repo-4/pull/27#pullrequestreview-5734293745",
       "https://github.com/owner-2/repo-4/pull/28#pullrequestreview-5734576152",
-      "https://github.com/owner-1/repo-2/pull/10420#pullrequestreview-5715968068",
     ]);
   });
 
@@ -1631,14 +1647,14 @@ describe("activity Tasks on Assigned PRs", () => {
 });
 
 describe("the All Tasks view", () => {
-  it("lists every open Task across repositories, grouped by repository and PR, the repository with the most first", async () => {
+  it("lists every open Task across repositories, grouped by repository and PR, in sidebar order", async () => {
     const model = await modelAfterBaseline(assignedFull);
 
     expect(
       model.allTasks.map((repository) => ({ name: repository.name, prs: repository.tasks.map((pr) => pr.number) })),
     ).toEqual([
-      { name: "owner-2/repo-4", prs: [25, 27, 28] },
       { name: "owner-1/repo-2", prs: [10420] },
+      { name: "owner-2/repo-4", prs: [25, 27, 28] },
     ]);
     // Each repository's Tasks as its own page groups them.
     for (const repository of model.allTasks) {
@@ -1648,7 +1664,7 @@ describe("the All Tasks view", () => {
 
   it("drops a Task marked done, as a repository page does", async () => {
     const app = await appAfterBaseline(checkResponse(assignedFull));
-    const [repo4] = (await app.pageModel()).allTasks;
+    const [, repo4] = (await app.pageModel()).allTasks;
 
     await app.markDone(...repo4.tasks[0].tasks.map((task) => task.id), repo4.tasks[1].tasks[0].id);
 

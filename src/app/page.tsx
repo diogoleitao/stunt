@@ -6,8 +6,7 @@ import { repositoryHref } from "./repository-href.ts";
 export default async function HomePage() {
   await connection();
   const model = await appStunt().pageModel();
-  const [first] = model.repositories;
-  if (first !== undefined) redirect(repositoryHref(first.name));
+  if (model.landingRepository !== undefined) redirect(repositoryHref(model.landingRepository));
 
   return (
     <p className="text-muted-foreground">

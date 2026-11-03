@@ -101,8 +101,11 @@ export type RepositoryTasks = Pick<RepositoryModel, "name" | "tasks">;
 
 export type PageModel = {
   checkedAt?: string;
-  // The sidebar's repositories, the one with the most open Tasks first.
+  // The sidebar's repositories, by name.
   repositories: RepositoryModel[];
+  // The repository the home page opens: the one with the most open Tasks, the
+  // first by name among those tied. Unset with no repositories.
+  landingRepository?: string;
   // Every repository with open Tasks, in sidebar order.
   allTasks: RepositoryTasks[];
 };
@@ -290,11 +293,17 @@ export function pageModel(state: State, now: Date): PageModel {
       ),
     };
   });
-  repositories.sort((a, b) => b.counts.tasks - a.counts.tasks || a.name.localeCompare(b.name));
+  repositories.sort((a, b) => a.name.localeCompare(b.name));
+
+  const landingRepository = repositories.reduce<RepositoryModel | undefined>(
+    (busiest, repository) =>
+      busiest === undefined || repository.counts.tasks > busiest.counts.tasks ? repository : busiest,
+    undefined,
+  )?.name;
 
   const allTasks = repositories
     .filter((repository) => repository.counts.tasks > 0)
     .map(({ name, tasks }) => ({ name, tasks }));
 
-  return { checkedAt: state.checkedAt, repositories, allTasks };
+  return { checkedAt: state.checkedAt, repositories, landingRepository, allTasks };
 }
