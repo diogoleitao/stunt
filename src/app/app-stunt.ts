@@ -3,7 +3,7 @@ import { defaultConfigPath } from "../config/config.ts";
 import { defaultDataDir } from "../data/store.ts";
 import { ghClient } from "../github/client.ts";
 import type { Notification } from "../stunt/notifications.ts";
-import { openStunt } from "../stunt/stunt.ts";
+import { openStunt, type Schedule } from "../stunt/stunt.ts";
 
 // The app's entry into stunt: the gh CLI's github.com account, the config
 // under ~/.config/stunt/, the state under ~/.local/share/stunt/, the clones
@@ -25,7 +25,7 @@ export type LiveUpdate = { sentAt: string; notifications: Notification[] };
 
 type Listener = (update: LiveUpdate) => void;
 
-const running = globalThis as { stopStunt?: () => void; stuntListeners?: Set<Listener> };
+const running = globalThis as { stuntSchedule?: Schedule; stuntListeners?: Set<Listener> };
 
 // Kept on globalThis so the schedule and every open tab's stream share one
 // set, across `next dev` reloads of this module too.
@@ -41,9 +41,17 @@ export function listenToChecks(listener: Listener): () => void {
 // Starts the server's checks, once per process: `next dev` can load this
 // module again without starting a second schedule.
 export async function startChecking(): Promise<void> {
-  if (running.stopStunt !== undefined) return;
-  running.stopStunt = await appStunt().start((notifications) => {
+  if (running.stuntSchedule !== undefined) return;
+  running.stuntSchedule = await appStunt().start((notifications) => {
     const update = { sentAt: new Date().toISOString(), notifications };
     for (const listener of listeners) listener(update);
   });
+}
+
+// Checks at once, joining the check running if there is one, and times the
+// next check from its end. Rejects with the check's error, or when the
+// server's checks have not started.
+export async function checkNow(): Promise<void> {
+  if (running.stuntSchedule === undefined) throw new Error("checking has not started");
+  await running.stuntSchedule.checkNow();
 }
