@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import type { RepositoryModel } from "../stunt/page-model.ts";
+import type { OwnerRow, RepositoryModel } from "../stunt/page-model.ts";
 import { repositoryHref } from "./repository-href.ts";
 
 const DASHBOARD_HREF = "/";
@@ -13,30 +13,44 @@ const DASHBOARD_HREF = "/";
 type Counts = RepositoryModel["counts"];
 
 // The sidebar's links: the dashboard with the totals of every repository,
-// then each repository with its Assigned PR and Review inbox counts, marking
-// the one on screen.
-export function RepositoryNav({ repositories }: { repositories: Pick<RepositoryModel, "name" | "counts">[] }) {
+// then each owner's repositories under the owner, each with its Assigned PR
+// and Review inbox counts, marking the one on screen.
+export function RepositoryNav({ owners }: { owners: OwnerRow[] }) {
   const pathname = usePathname();
-  const totals = repositories.reduce<Counts>(
-    (total, { counts }) => ({
-      assignedPRs: total.assignedPRs + counts.assignedPRs,
-      reviewInbox: total.reviewInbox + counts.reviewInbox,
-    }),
-    { assignedPRs: 0, reviewInbox: 0 },
-  );
+  const totals = owners
+    .flatMap((row) => row.repositories)
+    .reduce<Counts>(
+      (total, { counts }) => ({
+        assignedPRs: total.assignedPRs + counts.assignedPRs,
+        reviewInbox: total.reviewInbox + counts.reviewInbox,
+      }),
+      { assignedPRs: 0, reviewInbox: 0 },
+    );
   return (
-    <nav aria-label="Repositories" className="flex flex-col gap-0.5 p-2">
+    <nav aria-label="Repositories" className="flex flex-col gap-4 p-2">
       <NavLink href={DASHBOARD_HREF} current={pathname === DASHBOARD_HREF} label="Dashboard">
         <CountPair counts={totals} />
       </NavLink>
-      {repositories.map(({ name, counts }) => {
-        const href = repositoryHref(name);
-        return (
-          <NavLink key={name} href={href} current={pathname === href} label={name}>
-            <CountPair counts={counts} />
-          </NavLink>
-        );
-      })}
+      {owners.map((row) => (
+        <section key={row.owner} className="flex flex-col gap-0.5">
+          <div className="truncate px-2 pb-1 text-xs text-muted-foreground">{row.owner}</div>
+          {row.repositories.map(({ name, counts }) => {
+            const href = repositoryHref(name);
+            return (
+              <NavLink
+                key={name}
+                href={href}
+                current={pathname === href}
+                label={name.slice(row.owner.length + 1)}
+                owner={row.owner}
+                indented
+              >
+                <CountPair counts={counts} />
+              </NavLink>
+            );
+          })}
+        </section>
+      ))}
     </nav>
   );
 }
@@ -54,24 +68,35 @@ function NavLink({
   href,
   current,
   label,
+  owner,
+  indented = false,
   children,
 }: {
   href: string;
   current: boolean;
   label: string;
+  // Read out before `label`, and shown with it on hover, so two owners'
+  // same-named repositories stay apart.
+  owner?: string;
+  indented?: boolean;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
+      title={owner === undefined ? undefined : `${owner}/${label}`}
       aria-current={current ? "page" : undefined}
       className={cn(
         "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm",
+        indented && "pl-4",
         "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         current && "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
       )}
     >
-      <span className="truncate">{label}</span>
+      <span className="truncate">
+        {owner !== undefined && <span className="sr-only">{owner}/</span>}
+        {label}
+      </span>
       <span className="ml-auto flex shrink-0 items-center gap-2 text-xs font-normal text-muted-foreground tabular-nums">
         {children}
       </span>

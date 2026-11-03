@@ -85,7 +85,7 @@ export type RepositoryModel = {
   reviewInbox: ReviewInboxGroup[];
 };
 
-// One row of the dashboard: an owner's repositories, by name.
+// One owner's repositories, by name, for the dashboard and the sidebar.
 export type OwnerRow = {
   owner: string;
   repositories: Pick<RepositoryModel, "name" | "counts">[];
@@ -93,10 +93,10 @@ export type OwnerRow = {
 
 export type PageModel = {
   checkedAt?: string;
-  // The sidebar's repositories, by name.
+  // The repositories, by name.
   repositories: RepositoryModel[];
   // The repositories by owner, owners by name.
-  dashboard: OwnerRow[];
+  owners: OwnerRow[];
 };
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -226,18 +226,18 @@ function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
 }
 
 // `repositories`, in order, under their owners, owners by name.
-function dashboard(repositories: RepositoryModel[]): OwnerRow[] {
-  const owners = new Map<string, OwnerRow>();
+function owners(repositories: RepositoryModel[]): OwnerRow[] {
+  const rows = new Map<string, OwnerRow>();
   for (const { name, counts } of repositories) {
     const owner = name.slice(0, name.indexOf("/"));
-    let row = owners.get(owner);
+    let row = rows.get(owner);
     if (row === undefined) {
       row = { owner, repositories: [] };
-      owners.set(owner, row);
+      rows.set(owner, row);
     }
     row.repositories.push({ name, counts });
   }
-  return [...owners.values()].sort((a, b) => a.owner.localeCompare(b.owner));
+  return [...rows.values()].sort((a, b) => a.owner.localeCompare(b.owner));
 }
 
 export function pageModel(state: State, now: Date): PageModel {
@@ -274,5 +274,5 @@ export function pageModel(state: State, now: Date): PageModel {
   });
   repositories.sort((a, b) => a.name.localeCompare(b.name));
 
-  return { checkedAt: state.checkedAt, repositories, dashboard: dashboard(repositories) };
+  return { checkedAt: state.checkedAt, repositories, owners: owners(repositories) };
 }

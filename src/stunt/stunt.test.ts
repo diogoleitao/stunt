@@ -468,7 +468,7 @@ const ALL_ASSIGNED = {
       ),
     },
   ],
-  dashboard: [
+  owners: [
     {
       owner: "owner-1",
       repositories: [
@@ -555,7 +555,7 @@ describe("a check", () => {
   });
 
   it("shows nothing before the first check", async () => {
-    expect(await stunt(fakeGitHub([])).pageModel()).toEqual({ repositories: [], dashboard: [] });
+    expect(await stunt(fakeGitHub([])).pageModel()).toEqual({ repositories: [], owners: [] });
   });
 
   it("loads a state saved while Tasks existed, and keeps working", async () => {
@@ -979,6 +979,10 @@ describe("the Review inbox", () => {
     expect(model.repositories.find((repository) => repository.name === "owner-1/repo-5")).toMatchObject({
       assignedPRs: [],
     });
+    expect(model.owners.find((row) => row.owner === "owner-1")?.repositories).toContainEqual({
+      name: "owner-1/repo-5",
+      counts: { assignedPRs: 0, reviewInbox: 12 },
+    });
   });
 
   it("follows the next page of the Review inbox alone when that page overflows", async () => {
@@ -1026,11 +1030,11 @@ describe("the Review inbox", () => {
   });
 });
 
-describe("the dashboard", () => {
-  it("rows the repositories by owner, owners by name, each owner's repositories by name, with their counts", async () => {
+describe("the dashboard and the sidebar", () => {
+  it("group the repositories by owner, owners by name, each owner's repositories by name, with their counts", async () => {
     const model = await modelOf(checkResponse(assignedFull, inboxFull));
 
-    expect(model.dashboard).toEqual([
+    expect(model.owners).toEqual([
       {
         owner: "owner-1",
         repositories: [
@@ -1045,32 +1049,6 @@ describe("the dashboard", () => {
         repositories: [{ name: "owner-2/repo-4", counts: { assignedPRs: 3, reviewInbox: 0 } }],
       },
     ]);
-  });
-});
-
-describe("the sidebar", () => {
-  it("lists the repositories by name", async () => {
-    const model = await modelOf(checkResponse(assignedFull, inboxFull));
-
-    expect(model.repositories.map((repository) => repository.name)).toEqual([
-      "owner-1/repo-1",
-      "owner-1/repo-2",
-      "owner-1/repo-3",
-      "owner-1/repo-5",
-      "owner-2/repo-4",
-    ]);
-  });
-
-  it("counts each repository's Assigned PRs and Review inbox PRs", async () => {
-    const model = await modelOf(checkResponse(assignedFull, inboxFull));
-
-    expect(Object.fromEntries(model.repositories.map((repository) => [repository.name, repository.counts]))).toEqual({
-      "owner-1/repo-5": { assignedPRs: 0, reviewInbox: 12 },
-      "owner-1/repo-2": { assignedPRs: 3, reviewInbox: 4 },
-      "owner-1/repo-3": { assignedPRs: 1, reviewInbox: 1 },
-      "owner-1/repo-1": { assignedPRs: 1, reviewInbox: 0 },
-      "owner-2/repo-4": { assignedPRs: 3, reviewInbox: 0 },
-    });
   });
 });
 

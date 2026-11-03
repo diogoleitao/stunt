@@ -25,9 +25,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 <LiveUpdates />
               </div>
             </div>
-            <RepositoryNav
-              repositories={model.repositories.map(({ name, counts }) => ({ name, counts }))}
-            />
+            <RepositoryNav owners={model.owners} />
           </aside>
           <RepositorySwitcher names={model.repositories.map(({ name }) => name)} />
           <main className="min-w-0 flex-1 p-8">{children}</main>

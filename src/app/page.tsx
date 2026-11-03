@@ -11,14 +11,14 @@ export default async function DashboardPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-      {model.dashboard.length === 0 ? (
+      {model.owners.length === 0 ? (
         <p className="text-muted-foreground">
           {model.checkedAt === undefined
             ? "Waiting for the first check."
             : "No Assigned PRs, and your Review inbox is empty."}
         </p>
       ) : (
-        model.dashboard.map((row) => <OwnerCards key={row.owner} row={row} />)
+        model.owners.map((row) => <OwnerCards key={row.owner} row={row} />)
       )}
     </div>
   );

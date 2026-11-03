@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { repositoryHref } from "./repository-href.ts";
 import { switcherRows } from "./switcher-rows.ts";
 
-// The Cmd+K switcher over the sidebar's repositories. Escape closes it.
+// The Cmd+K switcher over every repository, by full name. Escape closes it.
 export function RepositorySwitcher({ names }: { names: string[] }) {
   const [open, setOpen] = useState(false);
 
