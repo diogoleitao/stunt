@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -12,9 +12,6 @@ import assignedFull from "./fixtures/assigned-prs-full.json" with { type: "json"
 import assignedPage1 from "./fixtures/assigned-prs-page-1.json" with { type: "json" };
 import assignedPage2 from "./fixtures/assigned-prs-page-2.json" with { type: "json" };
 import inboxFull from "./fixtures/review-inbox.json" with { type: "json" };
-// Recorded and stripped the same way, by the query for the inline comments of
-// every recorded review with no body that only comments.
-import repliesFull from "./fixtures/replies.json" with { type: "json" };
 // Recorded and stripped the same way, by the query for the Issue tracker
 // declaration on the default branch of a repository that has one, of one that
 // has none, and of one GitHub does not find.
@@ -77,14 +74,12 @@ const UNSCRATCHED = scratchFull.data.repository1;
 function withBodies(data: Record<string, unknown>) {
   const prs = Object.entries(data).flatMap(([key, value]) => {
     if (key === "assigned" || key === "inbox") return (value as { nodes: object[] } | undefined)?.nodes ?? [];
-    if (key.startsWith("tracked")) return [(value as { pullRequest: object | null } | null)?.pullRequest ?? null];
     return [];
   });
-  for (const pr of prs) if (pr !== null && !("body" in pr)) Object.assign(pr, { body: "" });
+  for (const pr of prs) if (!("body" in pr)) Object.assign(pr, { body: "" });
 }
 
-// Replays recorded response bodies in order, one per check query. A query for
-// reviews' inline comments, by their ids, is answered from `replies`. A query
+// Replays recorded response bodies in order, one per check query. A query
 // for Issue tracker declarations on default branches is answered from
 // `declarations`, by repository, a repository left out having none; those
 // queries are kept apart in `declarationCalls`. A query for the Tickets PR
@@ -94,7 +89,6 @@ function withBodies(data: Record<string, unknown>) {
 // out having none; those queries are kept apart in `scratchCalls`.
 function fakeGitHub(
   responses: Response[],
-  replies = repliesFull,
   declarations: Record<string, Declaration> = {},
   tickets: Record<string, Ticket> = {},
   scratchTrees: Record<string, ScratchTree> = {},
@@ -151,14 +145,6 @@ function fakeGitHub(
         return structuredClone(errors.length === 0 ? { data } : { data, errors });
       }
       calls.push({ query, variables });
-      if (Array.isArray(variables.ids)) {
-        const nodes = variables.ids.map((id) => {
-          const node = replies.data.nodes.find((candidate) => candidate.id === id);
-          if (node === undefined) throw new Error(`no recorded review ${id}`);
-          return node;
-        });
-        return structuredClone({ data: { nodes } });
-      }
       if (queue.length === 0) throw new Error("no recorded response left");
       const response = queue.shift();
       const body = structuredClone(typeof response === "function" ? response(variables) : response);
@@ -213,11 +199,6 @@ function issueTrackers(model: Awaited<ReturnType<typeof modelOf>>) {
   return Object.fromEntries(model.repositories.map((repository) => [repository.name, repository.issueTracker]));
 }
 
-// What the app keeps on disk.
-async function storedState() {
-  return JSON.parse(await readFile(path.join(dir, "data", "state.json"), "utf8"));
-}
-
 async function writeConfig(config: unknown) {
   await mkdir(path.dirname(configPath()), { recursive: true });
   await writeFile(configPath(), JSON.stringify(config));
@@ -229,49 +210,14 @@ type Recorded = { data: object };
 const NO_INBOX = { data: { ...inboxFull.data, inbox: { ...inboxFull.data.inbox, nodes: [] } } };
 
 // The recorded Assigned PRs, emptied, for checks about Review requests alone.
-// Some were reviewed after NOW, which a second check at NOW makes Tasks.
 const NO_ASSIGNED = { data: { ...assignedFull.data, assigned: { ...assignedFull.data.assigned, nodes: [] } } };
 
 type RecordedInboxPR = (typeof inboxFull)["data"]["inbox"]["nodes"][number];
 
 // One check's response: recorded Assigned PRs and a recorded Review inbox,
-// which were recorded apart. A check also looks up each PR with open Tasks by
-// its owner, name, and number; the lookup answers with the PR from `tracked`,
-// else from the Review inbox, else from the Assigned PRs.
-function checkResponse(
-  assigned: Recorded,
-  inbox: Recorded = NO_INBOX,
-  tracked: (RecordedInboxPR | ReturnType<typeof asLookup>)[] = [],
-) {
-  return (variables: Record<string, unknown>) => {
-    const data: Record<string, unknown> = { ...assigned.data, ...inbox.data };
-    const nodes = [
-      ...tracked,
-      ...((inbox.data as Partial<typeof inboxFull.data>).inbox?.nodes ?? []),
-      ...((assigned.data as Partial<typeof assignedFull.data>).assigned?.nodes ?? []).map(asLookup),
-    ];
-    for (let i = 0; `owner${i}` in variables; i++) {
-      const name = `${variables[`owner${i}`]}/${variables[`name${i}`]}`;
-      const pr = nodes.find((node) => node.repository.nameWithOwner === name && node.number === variables[`number${i}`]);
-      if (pr === undefined) throw new Error(`no recorded PR to look up for ${name}#${variables[`number${i}`]}`);
-      data[`tracked${i}`] = { pullRequest: pr };
-    }
-    return { data };
-  };
-}
-
-// A recorded Assigned PR as a lookup answers with it, with none of the Review
-// request events a lookup also reads.
-function asLookup(pr: RecordedPR) {
-  return { ...pr, timelineItems: { nodes: [] }, readyEvents: { nodes: [] } };
-}
-
-// Recorded Assigned PR `number`, changed by `change`.
-function assignedPR(number: number, change: (pr: RecordedPR) => void = () => {}) {
-  const pr = structuredClone(assignedFull.data.assigned.nodes.find((node) => node.number === number));
-  if (pr === undefined) throw new Error(`no recorded PR #${number}`);
-  change(pr);
-  return pr;
+// which were recorded apart.
+function checkResponse(assigned: Recorded, inbox: Recorded = NO_INBOX) {
+  return { data: { ...assigned.data, ...inbox.data } };
 }
 
 // The recorded full response, without the PRs that were merged or closed.
@@ -300,21 +246,6 @@ function withInboxPR(number: number, change: (pr: RecordedInboxPR) => void) {
   const pr = response.data.inbox.nodes.find((node) => node.number === number);
   if (pr === undefined) throw new Error(`no recorded Review inbox PR #${number}`);
   change(pr);
-  return response;
-}
-
-// Recorded Review inbox PR `number`, changed by `change`.
-function inboxPR(number: number, change: (pr: RecordedInboxPR) => void = () => {}) {
-  const pr = structuredClone(inboxFull.data.inbox.nodes.find((node) => node.number === number));
-  if (pr === undefined) throw new Error(`no recorded Review inbox PR #${number}`);
-  change(pr);
-  return pr;
-}
-
-// The recorded Review inbox, without the PRs the search no longer returns.
-function inboxWithout(...numbers: number[]) {
-  const response = structuredClone(inboxFull);
-  response.data.inbox.nodes = response.data.inbox.nodes.filter((node) => !numbers.includes(node.number));
   return response;
 }
 
@@ -394,8 +325,7 @@ const ALL_ASSIGNED = {
       name: "owner-1/repo-1",
       // No clone and no declaration on GitHub: every Assigned PR is Unfiled.
       issueTracker: null,
-      counts: { tasks: 0, assignedPRs: 1, reviewInbox: 0 },
-      tasks: [],
+      counts: { assignedPRs: 1, reviewInbox: 0 },
       reviewInbox: [],
       assignedPRs: unfiled(
         {
@@ -404,9 +334,10 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-1/repo-1/pull/136",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "changes requested",
-          openTasks: 0,
           updatedAgo: "15 days ago",
+          reviewers: [{ reviewer: "user-2", state: "changes requested" }],
           reviews: [{ reviewer: "user-2", state: "changes requested", submittedAgo: "2 months ago" }],
           pendingReviewers:[],
         },
@@ -415,8 +346,7 @@ const ALL_ASSIGNED = {
     {
       name: "owner-1/repo-2",
       issueTracker: null,
-      counts: { tasks: 0, assignedPRs: 3, reviewInbox: 0 },
-      tasks: [],
+      counts: { assignedPRs: 3, reviewInbox: 0 },
       reviewInbox: [],
       assignedPRs: unfiled(
         {
@@ -425,9 +355,10 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-1/repo-2/pull/10420",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "review required",
-          openTasks: 0,
           updatedAgo: "1 day ago",
+          reviewers: [{ reviewer: "user-2", state: "commented" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "1 day ago" }],
           pendingReviewers:[],
         },
@@ -437,9 +368,10 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-1/repo-2/pull/10412",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "review required",
-          openTasks: 0,
           updatedAgo: "2 days ago",
+          reviewers: [{ reviewer: "user-2", state: "pending" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "2 days ago" }],
           pendingReviewers:["user-2"],
         },
@@ -449,9 +381,13 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-1/repo-2/pull/9968",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "changes requested",
-          openTasks: 0,
           updatedAgo: "15 days ago",
+          reviewers: [
+            { reviewer: "user-2", state: "changes requested" },
+            { reviewer: "user-3", state: "approved" },
+          ],
           reviews: [
             { reviewer: "user-2", state: "changes requested", submittedAgo: "1 month ago" },
             { reviewer: "user-3", state: "approved", submittedAgo: "1 month ago" },
@@ -463,8 +399,7 @@ const ALL_ASSIGNED = {
     {
       name: "owner-1/repo-3",
       issueTracker: null,
-      counts: { tasks: 0, assignedPRs: 1, reviewInbox: 0 },
-      tasks: [],
+      counts: { assignedPRs: 1, reviewInbox: 0 },
       reviewInbox: [],
       assignedPRs: unfiled(
         // Assigned PRs include drafts.
@@ -474,9 +409,10 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-1/repo-3/pull/381",
           author: "user-1",
           draft: true,
+          pendingReview: false,
           reviewStatus: "review required",
-          openTasks: 0,
           updatedAgo: "5 days ago",
+          reviewers: [],
           reviews: [],
           pendingReviewers:[],
         },
@@ -485,8 +421,7 @@ const ALL_ASSIGNED = {
     {
       name: "owner-2/repo-4",
       issueTracker: null,
-      counts: { tasks: 0, assignedPRs: 3, reviewInbox: 0 },
-      tasks: [],
+      counts: { assignedPRs: 3, reviewInbox: 0 },
       reviewInbox: [],
       // Reviewed after NOW, by when they were recorded, so those times read
       // as just now.
@@ -497,9 +432,10 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-2/repo-4/pull/28",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "review required",
-          openTasks: 0,
           updatedAgo: "just now",
+          reviewers: [{ reviewer: "user-2", state: "commented" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "just now" }],
           pendingReviewers:[],
         },
@@ -509,9 +445,10 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-2/repo-4/pull/27",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "review required",
-          openTasks: 0,
           updatedAgo: "just now",
+          reviewers: [{ reviewer: "user-2", state: "commented" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "just now" }],
           pendingReviewers:[],
         },
@@ -521,17 +458,30 @@ const ALL_ASSIGNED = {
           url: "https://github.com/owner-2/repo-4/pull/25",
           author: "user-1",
           draft: false,
+          pendingReview: false,
           reviewStatus: "approved",
-          openTasks: 0,
           updatedAgo: "just now",
+          reviewers: [{ reviewer: "user-2", state: "approved" }],
           reviews: [{ reviewer: "user-2", state: "approved", submittedAgo: "21 hours ago" }],
           pendingReviewers:[],
         },
       ),
     },
   ],
-  landingRepository: "owner-1/repo-1",
-  allTasks: [],
+  dashboard: [
+    {
+      owner: "owner-1",
+      repositories: [
+        { name: "owner-1/repo-1", counts: { assignedPRs: 1, reviewInbox: 0 } },
+        { name: "owner-1/repo-2", counts: { assignedPRs: 3, reviewInbox: 0 } },
+        { name: "owner-1/repo-3", counts: { assignedPRs: 1, reviewInbox: 0 } },
+      ],
+    },
+    {
+      owner: "owner-2",
+      repositories: [{ name: "owner-2/repo-4", counts: { assignedPRs: 3, reviewInbox: 0 } }],
+    },
+  ],
 };
 
 describe("a check", () => {
@@ -605,7 +555,26 @@ describe("a check", () => {
   });
 
   it("shows nothing before the first check", async () => {
-    expect(await stunt(fakeGitHub([])).pageModel()).toEqual({ repositories: [], allTasks: [] });
+    expect(await stunt(fakeGitHub([])).pageModel()).toEqual({ repositories: [], dashboard: [] });
+  });
+
+  it("loads a state saved while Tasks existed, and keeps working", async () => {
+    await mkdir(path.join(dir, "data"), { recursive: true });
+    await writeFile(
+      path.join(dir, "data", "state.json"),
+      JSON.stringify({ baseline: "2026-10-01T12:00:00.000Z", tasks: [{ id: "review-1", state: "open" }], assignedPRs: [], reviewInbox: [] }),
+    );
+    const app = stunt(fakeGitHub([checkResponse(assignedFull)]));
+
+    await app.check();
+
+    expect(await app.pageModel()).toEqual(ALL_ASSIGNED);
+  });
+
+  it("fails on a GitHub error", async () => {
+    const failing = { data: null, errors: [{ type: "NOT_FOUND", path: ["viewer"], message: "Not found" }] };
+
+    await expect(stunt(fakeGitHub([failing])).check()).rejects.toThrow("GitHub GraphQL query failed: Not found");
   });
 
   it("keeps the last check's PRs when a check fails", async () => {
@@ -674,6 +643,46 @@ describe("an Assigned PR row", () => {
     expect((await rowOf(assignedFull, 9968)).pendingReviewers).toEqual([]);
   });
 
+  it("shows each reviewer's standing verdict or comment, most recent first", async () => {
+    expect((await rowOf(assignedFull, 9968)).reviewers).toEqual([
+      { reviewer: "user-2", state: "changes requested" },
+      { reviewer: "user-3", state: "approved" },
+    ]);
+    expect((await rowOf(assignedFull, 10420)).reviewers).toEqual([{ reviewer: "user-2", state: "commented" }]);
+    expect((await rowOf(assignedFull, 381)).reviewers).toEqual([]);
+  });
+
+  it("shows a reviewer requested again as pending, not their earlier review", async () => {
+    expect((await rowOf(assignedFull, 10412)).reviewers).toEqual([{ reviewer: "user-2", state: "pending" }]);
+  });
+
+  it("shows everyone still requested as pending after those who reviewed, teams by their slug", async () => {
+    const response = withPR(9968, (pr) => {
+      pr.reviewRequests.nodes = [
+        { requestedReviewer: { __typename: "User", login: "user-4" } },
+        { requestedReviewer: { __typename: "Team", combinedSlug: "owner-1/team-1" } },
+      ] as RecordedPR["reviewRequests"]["nodes"];
+    });
+
+    expect((await rowOf(response, 9968)).reviewers).toEqual([
+      { reviewer: "user-2", state: "changes requested" },
+      { reviewer: "user-3", state: "approved" },
+      { reviewer: "user-4", state: "pending" },
+      { reviewer: "owner-1/team-1", state: "pending" },
+    ]);
+  });
+
+  it("shows no one for a dismissed verdict, unless they are still requested", async () => {
+    const response = withPR(10412, (pr) => {
+      pr.reviews.nodes = [
+        review("user-2", "DISMISSED", "2026-11-01T09:00:00Z"),
+        review("user-3", "DISMISSED", "2026-11-01T09:30:00Z"),
+      ] as RecordedPR["reviews"]["nodes"];
+    });
+
+    expect((await rowOf(response, 10412)).reviewers).toEqual([{ reviewer: "user-2", state: "pending" }]);
+  });
+
   it("holds a team a review is still requested from by its slug", async () => {
     const response = withPR(10412, (pr) => {
       (pr.reviewRequests.nodes as unknown[]).push({
@@ -682,6 +691,56 @@ describe("an Assigned PR row", () => {
     });
 
     expect((await rowOf(response, 10412)).pendingReviewers).toEqual(["user-2", "owner-1/team-1"]);
+  });
+});
+
+// I am user-1, and authored every recorded Assigned PR.
+describe("Pending review", () => {
+  // #10420 as authored by user-3, with `reviews`, and a Review request
+  // pending for each of `requested`.
+  function authoredByOthers(reviews: unknown[], ...requested: unknown[]) {
+    return withPR(10420, (pr) => {
+      pr.author = { login: "user-3" };
+      pr.reviews.nodes = reviews as RecordedPR["reviews"]["nodes"];
+      pr.reviewRequests.nodes = requested.map((requestedReviewer) => ({ requestedReviewer })) as RecordedPR["reviewRequests"]["nodes"];
+    });
+  }
+
+  const ME = { __typename: "User", login: "user-1" };
+
+  it("holds an Assigned PR someone else authored that I never reviewed", async () => {
+    const response = authoredByOthers([review("user-2", "APPROVED", "2026-11-01T09:00:00Z")]);
+
+    expect((await rowOf(response, 10420)).pendingReview).toBe(true);
+  });
+
+  it("holds an Assigned PR someone else authored with a Review request pending for me, though I reviewed it before", async () => {
+    const response = authoredByOthers([review("user-1", "APPROVED", "2026-11-01T09:00:00Z")], ME);
+
+    expect((await rowOf(response, 10420)).pendingReview).toBe(true);
+  });
+
+  it("holds an Assigned PR someone else authored while my only review is a pending draft", async () => {
+    const response = authoredByOthers([{ state: "PENDING", submittedAt: null, author: { login: "user-1" } }]);
+
+    expect((await rowOf(response, 10420)).pendingReview).toBe(true);
+  });
+
+  it.each([
+    ["with no Review request pending for me", []],
+    ["with a Review request pending only for a team of mine", [{ __typename: "Team", combinedSlug: "owner-1/team-1" }]],
+  ])("leaves out an Assigned PR someone else authored that I reviewed, %s", async (_, requested) => {
+    const response = authoredByOthers([review("user-1", "COMMENTED", "2026-11-01T09:00:00Z")], ...requested);
+
+    expect((await rowOf(response, 10420)).pendingReview).toBe(false);
+  });
+
+  it("never holds an Assigned PR I authored", async () => {
+    const response = withPR(10420, (pr) => {
+      pr.reviewRequests.nodes = [{ requestedReviewer: ME }] as RecordedPR["reviewRequests"]["nodes"];
+    });
+
+    expect((await rowOf(response, 10420)).pendingReview).toBe(false);
   });
 });
 
@@ -967,294 +1026,30 @@ describe("the Review inbox", () => {
   });
 });
 
-// The open Tasks of `repository` in `model`, grouped by PR.
-function tasksOf(model: Awaited<ReturnType<typeof modelOf>>, repository: string) {
-  return model.repositories.find((candidate) => candidate.name === repository)?.tasks ?? [];
-}
+describe("the dashboard", () => {
+  it("rows the repositories by owner, owners by name, each owner's repositories by name, with their counts", async () => {
+    const model = await modelOf(checkResponse(assignedFull, inboxFull));
 
-describe("Review request Tasks", () => {
-  it("makes each Review request pending at the first check an open Task, grouped by PR, oldest first", async () => {
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)]));
-
-    await app.check();
-
-    const model = await app.pageModel();
-    expect(tasksOf(model, "owner-1/repo-3")).toEqual([
+    expect(model.dashboard).toEqual([
       {
-        number: 368,
-        title: "Review inbox PR 12",
-        url: "https://github.com/owner-1/repo-3/pull/368",
-        tasks: [
-          {
-            id: expect.any(String),
-            kind: "review request",
-            // Opens the PR's Files changed tab.
-            url: "https://github.com/owner-1/repo-3/pull/368/files",
-            by: "user-2",
-            ago: "5 days ago",
-          },
+        owner: "owner-1",
+        repositories: [
+          { name: "owner-1/repo-1", counts: { assignedPRs: 1, reviewInbox: 0 } },
+          { name: "owner-1/repo-2", counts: { assignedPRs: 3, reviewInbox: 4 } },
+          { name: "owner-1/repo-3", counts: { assignedPRs: 1, reviewInbox: 1 } },
+          { name: "owner-1/repo-5", counts: { assignedPRs: 0, reviewInbox: 12 } },
         ],
       },
-    ]);
-    expect(tasksOf(model, "owner-1/repo-2").map((pr) => pr.number)).toEqual([10255, 10306, 10404, 10419]);
-  });
-
-  it("records the Baseline at the first check, and never resets it at later checks or restarts", async () => {
-    await stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)])).check();
-    await stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)]), new Date("2026-11-02T12:00:00Z")).check();
-
-    expect(await storedState()).toMatchObject({
-      baseline: "2026-11-01T12:00:00.000Z",
-      checkedAt: "2026-11-02T12:00:00.000Z",
-    });
-  });
-
-  it("makes a Review request a Task once, across checks and restarts", async () => {
-    const app = stunt(fakeGitHub([checkResponse(NO_ASSIGNED, inboxFull), checkResponse(NO_ASSIGNED, inboxFull)]));
-    await app.check();
-    await app.check();
-    const restarted = stunt(fakeGitHub([checkResponse(NO_ASSIGNED, inboxFull)]), new Date("2026-11-02T12:00:00Z"));
-    await restarted.check();
-
-    const model = await restarted.pageModel();
-    expect(tasksOf(model, "owner-1/repo-3").map((pr) => pr.tasks.length)).toEqual([1]);
-    expect(model.repositories.flatMap((repository) => repository.tasks.flatMap((pr) => pr.tasks))).toHaveLength(17);
-  });
-
-  it("looks up every PR with open Tasks at each check, whether or not the search returns it", async () => {
-    const reviewed = inboxPR(368, (pr) => {
-      withoutMyRequest(pr);
-      (pr.reviews.nodes as unknown[]).push(review("user-1", "APPROVED", "2026-11-01T11:00:00Z"));
-    });
-    const github = fakeGitHub([
-      checkResponse(NO_ASSIGNED, inboxFull),
-      checkResponse(NO_ASSIGNED, inboxWithout(368), [reviewed]),
-      checkResponse(NO_ASSIGNED, inboxWithout(368)),
-    ]);
-    const app = stunt(github);
-
-    await app.check();
-    await app.check();
-    await app.check();
-
-    // Each lookup as owner/name#number.
-    const lookups = github.calls.map(({ variables }) =>
-      Object.keys(variables)
-        .filter((key) => /^owner\d+$/.test(key))
-        .map((key) => key.slice("owner".length))
-        .map((i) => `${variables[`owner${i}`]}/${variables[`name${i}`]}#${variables[`number${i}`]}`),
-    );
-    expect(lookups[0]).toEqual([]);
-    expect(lookups[1]).toHaveLength(17);
-    expect(lookups[1]).toContain("owner-1/repo-3#368");
-    // #368's only Task is done.
-    expect(lookups[2]).toHaveLength(16);
-    expect(lookups[2]).not.toContain("owner-1/repo-3#368");
-  });
-
-  // GitHub clears my Review request when I submit a review, and the search
-  // stops returning the PR.
-  it.each([["APPROVED"], ["CHANGES_REQUESTED"], ["COMMENTED"]])(
-    "is done once I submit a review after the request (%s)",
-    async (state) => {
-      const reviewed = inboxPR(368, (pr) => {
-        withoutMyRequest(pr);
-        (pr.reviews.nodes as unknown[]).push(review("user-1", state, "2026-11-01T11:00:00Z"));
-      });
-      const app = stunt(
-        fakeGitHub([checkResponse(assignedFull, inboxFull), checkResponse(assignedFull, inboxWithout(368), [reviewed])]),
-      );
-
-      await app.check();
-      await app.check();
-
-      expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-    },
-  );
-
-  it("makes a re-request a new Task, the earlier one done by my review", async () => {
-    const reRequested = withInboxPR(368, (pr) => {
-      (pr.reviews.nodes as unknown[]).push(review("user-1", "COMMENTED", "2026-11-01T11:00:00Z"));
-      pr.timelineItems.nodes.push(requested("user-2", "user-1", "2026-11-01T11:30:00Z"));
-    });
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull), checkResponse(assignedFull, reRequested)]));
-
-    await app.check();
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")[0].tasks).toEqual([
-      expect.objectContaining({ by: "user-2", ago: "30 minutes ago" }),
-    ]);
-  });
-
-  it("ignores a Review request on a draft, and makes it a Task once the PR is marked ready", async () => {
-    const draft = withInboxPR(368, (pr) => {
-      pr.isDraft = true;
-    });
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, draft), checkResponse(assignedFull, inboxFull)]));
-
-    await app.check();
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-
-    await app.check();
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3").map((pr) => pr.number)).toEqual([368]);
-  });
-
-  it("ignores a Review request made to a team of mine rather than to me", async () => {
-    const toTeam = withInboxPR(368, (pr) => {
-      withoutMyRequest(pr);
-      (pr.reviewRequests.nodes as unknown[]).push({
-        requestedReviewer: { __typename: "Team", combinedSlug: "owner-1/team-1" },
-      });
-    });
-
-    expect(tasksOf(await modelOf(checkResponse(assignedFull, toTeam)), "owner-1/repo-3")).toEqual([]);
-  });
-
-  it("expires once the request is withdrawn", async () => {
-    const withdrawn = inboxPR(368, withoutMyRequest);
-    const app = stunt(
-      fakeGitHub([checkResponse(assignedFull, inboxFull), checkResponse(assignedFull, inboxWithout(368), [withdrawn])]),
-    );
-
-    await app.check();
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-  });
-
-  it("expires when the request is withdrawn and made again between checks, the new request a new Task", async () => {
-    const requestedAgain = withInboxPR(368, (pr) => {
-      pr.timelineItems.nodes.push(requested("user-2", "user-1", "2026-11-01T11:30:00Z"));
-    });
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull), checkResponse(assignedFull, requestedAgain)]));
-
-    await app.check();
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")[0].tasks).toEqual([
-      expect.objectContaining({ by: "user-2", ago: "30 minutes ago" }),
-    ]);
-  });
-
-  it.each([["MERGED"], ["CLOSED"]])("expires when its PR is %s, though the search no longer returns it", async (state) => {
-    const ended = inboxPR(368, (pr) => {
-      pr.state = state;
-    });
-    const app = stunt(
-      fakeGitHub([checkResponse(assignedFull, inboxFull), checkResponse(assignedFull, inboxWithout(368), [ended])]),
-    );
-
-    await app.check();
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-  });
-
-  it("expires when GitHub no longer finds its PR", async () => {
-    const gone = (variables: Record<string, unknown>) => {
-      const { data } = checkResponse(assignedFull, inboxWithout(368), [inboxPR(368)])(variables);
-      const i = Object.keys(variables)
-        .find((key) => key.startsWith("number") && variables[key] === 368)
-        ?.slice("number".length);
-      data[`tracked${i}`] = null;
-      const message = "Could not resolve to a Repository with the name 'owner-1/repo-3'.";
-      return { data, errors: [{ type: "NOT_FOUND", path: [`tracked${i}`], message }] };
-    };
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull), gone]));
-
-    await app.check();
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-  });
-
-  it("fails a check on any other GitHub error", async () => {
-    const failing = { data: null, errors: [{ type: "NOT_FOUND", path: ["viewer"], message: "Not found" }] };
-
-    await expect(stunt(fakeGitHub([failing])).check()).rejects.toThrow("GitHub GraphQL query failed: Not found");
-  });
-
-  it("is hidden once marked done, and stays done at later checks and restarts", async () => {
-    const app = stunt(fakeGitHub([checkResponse(NO_ASSIGNED, inboxFull), checkResponse(NO_ASSIGNED, inboxFull)]));
-    await app.check();
-    const [task] = tasksOf(await app.pageModel(), "owner-1/repo-3")[0].tasks;
-
-    await app.markDone(task.id);
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-
-    await app.check();
-    const restarted = stunt(fakeGitHub([checkResponse(NO_ASSIGNED, inboxFull)]));
-    await restarted.check();
-    const model = await restarted.pageModel();
-    expect(tasksOf(model, "owner-1/repo-3")).toEqual([]);
-    expect(tasksOf(model, "owner-1/repo-2").map((pr) => pr.number)).toEqual([10255, 10306, 10404, 10419]);
-  });
-
-  it("keeps a Task marked done while a check was asking GitHub", async () => {
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)]));
-    await app.check();
-    const [task] = tasksOf(await app.pageModel(), "owner-1/repo-3")[0].tasks;
-    const { promise: asked, resolve: ask } = Promise.withResolvers<void>();
-    const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
-    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)]);
-    const checking = stunt({
-      async graphql(query, variables) {
-        ask();
-        await answered;
-        return github.graphql(query, variables);
+      {
+        owner: "owner-2",
+        repositories: [{ name: "owner-2/repo-4", counts: { assignedPRs: 3, reviewInbox: 0 } }],
       },
-    }).check();
-
-    await asked;
-    await app.markDone(task.id);
-    answer();
-    await checking;
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3")).toEqual([]);
-  });
-
-  // GitHub keeps my Review request when the PR goes back to draft.
-  it("keeps a repository with only open Tasks in the sidebar", async () => {
-    const backToDraft = inboxPR(368, (pr) => {
-      pr.isDraft = true;
-    });
-    const app = stunt(
-      fakeGitHub([
-        checkResponse(assignedFull, inboxFull),
-        checkResponse(withoutPRs(381), inboxWithout(368), [backToDraft]),
-      ]),
-    );
-
-    await app.check();
-    await app.check();
-
-    const repository = (await app.pageModel()).repositories.find((candidate) => candidate.name === "owner-1/repo-3");
-    expect(repository).toMatchObject({
-      counts: { tasks: 1, assignedPRs: 0, reviewInbox: 0 },
-      assignedPRs: [],
-      reviewInbox: [],
-    });
-    expect(repository?.tasks.map((pr) => pr.number)).toEqual([368]);
-  });
-
-  it("stays open while my review is a pending draft", async () => {
-    const drafting = withInboxPR(368, (pr) => {
-      (pr.reviews.nodes as unknown[]).push({ state: "PENDING", submittedAt: null, author: { login: "user-1" } });
-    });
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull), checkResponse(assignedFull, drafting)]));
-
-    await app.check();
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-1/repo-3").map((pr) => pr.number)).toEqual([368]);
+    ]);
   });
 });
 
 describe("the sidebar", () => {
-  // At the first check, every recorded Review request becomes a Task: 12 in
-  // owner-1/repo-5, 4 in owner-1/repo-2, and 1 in owner-1/repo-3.
-  it("lists the repositories by name, whatever their open Tasks", async () => {
+  it("lists the repositories by name", async () => {
     const model = await modelOf(checkResponse(assignedFull, inboxFull));
 
     expect(model.repositories.map((repository) => repository.name)).toEqual([
@@ -1266,496 +1061,102 @@ describe("the sidebar", () => {
     ]);
   });
 
-  it("lands on the repository with the most open Tasks", async () => {
+  it("counts each repository's Assigned PRs and Review inbox PRs", async () => {
     const model = await modelOf(checkResponse(assignedFull, inboxFull));
 
-    expect(model.landingRepository).toBe("owner-1/repo-5");
-  });
-
-  it("lands on the first repository by name when none has more open Tasks than the rest", async () => {
-    const model = await modelOf(checkResponse(assignedFull));
-
-    expect(model.landingRepository).toBe("owner-1/repo-1");
-  });
-
-  it("lands nowhere before the first check", async () => {
-    expect((await stunt(fakeGitHub([])).pageModel()).landingRepository).toBeUndefined();
-  });
-
-  it("counts each repository's open Tasks, Assigned PRs, and Review inbox PRs", async () => {
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)]));
-    await app.check();
-    const [pr10255] = tasksOf(await app.pageModel(), "owner-1/repo-2");
-    await app.markDone(pr10255.tasks[0].id);
-
-    const model = await app.pageModel();
     expect(Object.fromEntries(model.repositories.map((repository) => [repository.name, repository.counts]))).toEqual({
-      "owner-1/repo-5": { tasks: 12, assignedPRs: 0, reviewInbox: 12 },
-      "owner-1/repo-2": { tasks: 3, assignedPRs: 3, reviewInbox: 4 },
-      "owner-1/repo-3": { tasks: 1, assignedPRs: 1, reviewInbox: 1 },
-      "owner-1/repo-1": { tasks: 0, assignedPRs: 1, reviewInbox: 0 },
-      "owner-2/repo-4": { tasks: 0, assignedPRs: 3, reviewInbox: 0 },
+      "owner-1/repo-5": { assignedPRs: 0, reviewInbox: 12 },
+      "owner-1/repo-2": { assignedPRs: 3, reviewInbox: 4 },
+      "owner-1/repo-3": { assignedPRs: 1, reviewInbox: 1 },
+      "owner-1/repo-1": { assignedPRs: 1, reviewInbox: 0 },
+      "owner-2/repo-4": { assignedPRs: 3, reviewInbox: 0 },
     });
   });
 });
 
-// The first check, which records the Baseline, and a later one. Of the
-// recorded Assigned PRs' activity, only #10420's review, #25's reviews, and
-// #28's and #27's reviews come after the Baseline.
-const BASELINE = new Date("2026-10-30T12:00:00Z");
+// Two checks some days apart. Of the recorded Assigned PRs' reviews, only
+// #10420's, #25's, #27's, and #28's come between them.
+const EARLIER = new Date("2026-10-30T12:00:00Z");
 const LATER = new Date("2026-11-02T12:00:00Z");
 
-// The app after the first check at BASELINE, then a check at LATER returning
-// `response`. Its later checks return `next`.
-async function appAfterBaseline(response: Response, ...next: Response[]) {
-  await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
-  const app = stunt(fakeGitHub([response, ...next]), LATER);
-  await app.check();
-  return app;
-}
-
-// The page model after the first check at BASELINE, then a check at LATER
-// returning the Assigned PRs in `assigned`.
-async function modelAfterBaseline(assigned: Recorded) {
-  return (await appAfterBaseline(checkResponse(assigned))).pageModel();
-}
-
-describe("activity Tasks on Assigned PRs", () => {
-  it("makes each review submitted after the Baseline a Task, opening the review", async () => {
-    const model = await modelAfterBaseline(assignedFull);
-
-    expect(tasksOf(model, "owner-2/repo-4")).toEqual([
-      {
-        number: 25,
-        title: "Assigned PR 6",
-        url: "https://github.com/owner-2/repo-4/pull/25",
-        tasks: [
-          {
-            id: expect.any(String),
-            kind: "review",
-            url: "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723093396",
-            by: "user-2",
-            ago: "1 day ago",
-          },
-          {
-            id: expect.any(String),
-            kind: "review",
-            url: "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5734277310",
-            by: "user-2",
-            ago: "2 hours ago",
-          },
-        ],
-      },
-      {
-        number: 27,
-        title: "Assigned PR 7",
-        url: "https://github.com/owner-2/repo-4/pull/27",
-        tasks: [
-          {
-            id: expect.any(String),
-            kind: "review",
-            url: "https://github.com/owner-2/repo-4/pull/27#pullrequestreview-5734293745",
-            by: "user-2",
-            ago: "2 hours ago",
-          },
-        ],
-      },
-      {
-        number: 28,
-        title: "Assigned PR 8",
-        url: "https://github.com/owner-2/repo-4/pull/28",
-        tasks: [
-          {
-            id: expect.any(String),
-            kind: "review",
-            url: "https://github.com/owner-2/repo-4/pull/28#pullrequestreview-5734576152",
-            by: "user-2",
-            ago: "2 hours ago",
-          },
-        ],
-      },
-    ]);
-    expect(tasksOf(model, "owner-1/repo-2")).toEqual([
-      {
-        number: 10420,
-        title: "Assigned PR 3",
-        url: "https://github.com/owner-1/repo-2/pull/10420",
-        tasks: [
-          {
-            id: expect.any(String),
-            kind: "review",
-            url: "https://github.com/owner-1/repo-2/pull/10420#pullrequestreview-5715968068",
-            by: "user-2",
-            ago: "2 days ago",
-          },
-        ],
-      },
-    ]);
-    expect(tasksOf(model, "owner-1/repo-1")).toEqual([]);
-  });
-
-  type RecordedReview = RecordedPR["reviews"]["nodes"][number];
-
-  it.each<[string, (review: RecordedReview) => void]>([
-    ["mine", (review) => (review.author = { login: "user-1", __typename: "User" })],
-    ["a bot's", (review) => (review.author = { login: "bot-1", __typename: "Bot" })],
-    ["pending", (review) => Object.assign(review, { state: "PENDING", submittedAt: null })],
-    ["dismissed", (review) => (review.state = "DISMISSED")],
-  ])("never makes a review that is %s a Task", async (_, change) => {
-    const response = withPR(28, (pr) => change(pr.reviews.nodes[0]));
-
-    const model = await modelAfterBaseline(response);
-
-    expect(tasksOf(model, "owner-2/repo-4").map((pr) => pr.number)).toEqual([25, 27]);
-  });
-
-  it("makes activity on a draft Assigned PR a Task", async () => {
-    const draft = withPR(28, (pr) => {
-      pr.isDraft = true;
-    });
-
-    const model = await modelAfterBaseline(draft);
-
-    expect(tasksOf(model, "owner-2/repo-4").map((pr) => pr.number)).toEqual([25, 27, 28]);
-  });
-
-  // Every activity after the Baseline was posted while the app was stopped.
-  it("makes activity posted while the app was stopped a Task at the next check, once across checks and restarts", async () => {
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
-    const restarted = stunt(fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]), LATER);
-    await restarted.check();
-    await restarted.check();
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), LATER).check();
-
-    const model = await restarted.pageModel();
-    expect(
-      model.repositories.flatMap((repository) => repository.tasks.flatMap((pr) => pr.tasks.map((task) => task.url))),
-    ).toEqual([
-      "https://github.com/owner-1/repo-2/pull/10420#pullrequestreview-5715968068",
-      "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723093396",
-      "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5734277310",
-      "https://github.com/owner-2/repo-4/pull/27#pullrequestreview-5734293745",
-      "https://github.com/owner-2/repo-4/pull/28#pullrequestreview-5734576152",
-    ]);
-  });
-
-  // The numbers of the PRs with open Tasks in owner-2/repo-4.
-  async function repo4PRs(app: { pageModel: ReturnType<typeof stunt>["pageModel"] }) {
-    return tasksOf(await app.pageModel(), "owner-2/repo-4").map((pr) => pr.number);
-  }
-
-  it("stays open after I review its PR, until I mark it done, and stays done at later checks and restarts", async () => {
-    const reviewedByMe = withPR(28, (pr) => {
-      pr.reviews.nodes.push({
-        state: "APPROVED",
-        submittedAt: "2026-11-02T11:00:00Z",
-        author: { login: "user-1", __typename: "User" },
-        id: "review-25",
-        url: "https://github.com/owner-2/repo-4/pull/28#pullrequestreview-1",
-        body: "",
-      });
-    });
-    const app = await appAfterBaseline(
-      checkResponse(assignedFull),
-      checkResponse(reviewedByMe),
-      checkResponse(reviewedByMe),
-    );
-
-    await app.check();
-    expect(await repo4PRs(app)).toEqual([25, 27, 28]);
-
-    const [task] = tasksOf(await app.pageModel(), "owner-2/repo-4")[2].tasks;
-    await app.markDone(task.id);
-    expect(await repo4PRs(app)).toEqual([25, 27]);
-
-    await app.check();
-    const restarted = stunt(fakeGitHub([checkResponse(reviewedByMe)]), LATER);
-    await restarted.check();
-    expect(await repo4PRs(restarted)).toEqual([25, 27]);
-  });
-
-  it.each([["MERGED"], ["CLOSED"]])("expires when its PR is %s, though the search no longer returns it", async (state) => {
-    const ended = assignedPR(28, (pr) => {
-      pr.state = state;
-    });
-    const app = await appAfterBaseline(
-      checkResponse(assignedFull),
-      checkResponse(withoutPRs(28), NO_INBOX, [asLookup(ended)]),
-    );
-
-    await app.check();
-
-    expect(await repo4PRs(app)).toEqual([25, 27]);
-  });
-
-  it("marks every open Task of a PR done at once", async () => {
-    const app = await appAfterBaseline(checkResponse(assignedFull), checkResponse(assignedFull));
-    const [pr25] = tasksOf(await app.pageModel(), "owner-2/repo-4");
-    expect(pr25.tasks).toHaveLength(2);
-
-    await app.markDone(...pr25.tasks.map((task) => task.id));
-    expect(await repo4PRs(app)).toEqual([27, 28]);
-
-    await app.check();
-    expect(await repo4PRs(app)).toEqual([27, 28]);
-  });
-
-  it("counts each Assigned PR's open Tasks on its row", async () => {
-    const app = await appAfterBaseline(checkResponse(assignedFull));
-    const [, pr27] = tasksOf(await app.pageModel(), "owner-2/repo-4");
-    await app.markDone(pr27.tasks[0].id);
-
-    const rows = (await app.pageModel()).repositories.flatMap((repository) =>
-      repository.assignedPRs.flatMap((group) => group.prs),
-    );
-    expect(Object.fromEntries(rows.map((row) => [row.number, row.openTasks]))).toEqual({
-      28: 1,
-      27: 0,
-      25: 2,
-      10420: 1,
-      10412: 0,
-      381: 0,
-      9968: 0,
-      136: 0,
-    });
-  });
-
-  // #25's recorded replies are mine.
-  function withReplyBy(login: string, __typename = "User") {
-    return withPR(25, (pr) => {
-      pr.reviews.nodes[1].author = { login, __typename };
-    });
-  }
-
-  it("makes a review with no body whose inline comments all reply to threads a reply Task, opening the reply", async () => {
-    const response = withReplyBy("user-2");
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
-    const github = fakeGitHub([checkResponse(response), checkResponse(response, NO_INBOX, [])]);
-    const app = stunt(github, LATER);
-
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-2/repo-4")[0].tasks).toEqual([
-      expect.objectContaining({ kind: "review", ago: "1 day ago" }),
-      {
-        id: expect.any(String),
-        kind: "reply",
-        url: "https://github.com/owner-2/repo-4/pull/25#discussion_r4432324515",
-        by: "user-2",
-        ago: "1 day ago",
-      },
-      expect.objectContaining({ kind: "review", ago: "2 hours ago" }),
-    ]);
-    // Only the new review with no body asks for its inline comments, once.
-    expect(github.calls.map((call) => call.variables.ids)).toEqual([undefined, ["review-4"]]);
-    await app.check();
-    expect(github.calls.filter((call) => call.variables.ids !== undefined)).toHaveLength(1);
-  });
-
-  it("makes a review with no body a review Task when one of its inline comments starts a thread", async () => {
-    const startsThread = structuredClone(repliesFull);
-    (startsThread.data.nodes[0].comments.nodes[0] as { replyTo: unknown }).replyTo = null;
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
-    const app = stunt(fakeGitHub([checkResponse(withReplyBy("user-2"))], startsThread), LATER);
-
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-2/repo-4")[0].tasks[1]).toEqual(
-      expect.objectContaining({
-        kind: "review",
-        url: "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723657779",
-      }),
-    );
-  });
-
-  // GitHub answers a review it no longer finds, deleted since the check
-  // query, with null and an error.
-  it("makes a review with no body a review Task when GitHub no longer finds it to read its inline comments", async () => {
-    const github = fakeGitHub([checkResponse(withReplyBy("user-2"))]);
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
-    const app = stunt(
-      {
-        async graphql(query, variables) {
-          if (!Array.isArray(variables.ids)) return github.graphql(query, variables);
-          const message = "Could not resolve to a node with the global id of 'review-4'";
-          return { data: { nodes: [null] }, errors: [{ type: "NOT_FOUND", path: ["nodes", 0], message }] };
-        },
-      },
-      LATER,
-    );
-
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-2/repo-4")[0].tasks[1]).toEqual(
-      expect.objectContaining({
-        kind: "review",
-        url: "https://github.com/owner-2/repo-4/pull/25#pullrequestreview-5723657779",
-      }),
-    );
-  });
-
-  it.each([
-    ["mine", "user-1", "User"],
-    ["a bot's", "bot-1", "Bot"],
-  ])("never makes a reply that is %s a Task, nor asks for its inline comments", async (_, login, type) => {
-    const github = fakeGitHub([checkResponse(withReplyBy(login, type))]);
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
-    const app = stunt(github, LATER);
-
-    await app.check();
-
-    expect(tasksOf(await app.pageModel(), "owner-2/repo-4")[0].tasks.map((task) => task.kind)).toEqual([
-      "review",
-      "review",
-    ]);
-    expect(github.calls).toHaveLength(1);
-  });
-
-  // Every recorded conversation comment is mine.
-  it("makes a conversation comment created after the Baseline a Task, opening the comment", async () => {
-    const response = withPR(10420, (pr) => {
-      pr.comments.nodes[0].author = { __typename: "User", login: "user-2" };
-    });
-
-    const model = await modelAfterBaseline(response);
-
-    expect(tasksOf(model, "owner-1/repo-2")[0].tasks).toEqual([
-      {
-        id: expect.any(String),
-        kind: "comment",
-        url: "https://github.com/owner-1/repo-2/pull/10420#issuecomment-6522398983",
-        by: "user-2",
-        ago: "2 days ago",
-      },
-      expect.objectContaining({ kind: "review" }),
-    ]);
-  });
-
-  it.each<[string, number, RecordedPR["comments"]["nodes"][number]["author"]]>([
-    ["mine", 10420, { __typename: "User", login: "user-1" }],
-    ["a bot's", 10420, { __typename: "Bot", login: "bot-1" }],
-    ["created before the Baseline", 10412, { __typename: "User", login: "user-2" }],
-  ])("never makes a conversation comment that is %s a Task", async (_, number, author) => {
-    const response = withPR(number, (pr) => {
-      pr.comments.nodes[0].author = author;
-    });
-
-    const model = await modelAfterBaseline(response);
-
-    expect(tasksOf(model, "owner-1/repo-2").flatMap((pr) => pr.tasks.map((task) => task.kind))).toEqual(["review"]);
-  });
-});
-
-describe("the All Tasks view", () => {
-  it("lists every open Task across repositories, grouped by repository and PR, in sidebar order", async () => {
-    const model = await modelAfterBaseline(assignedFull);
-
-    expect(
-      model.allTasks.map((repository) => ({ name: repository.name, prs: repository.tasks.map((pr) => pr.number) })),
-    ).toEqual([
-      { name: "owner-1/repo-2", prs: [10420] },
-      { name: "owner-2/repo-4", prs: [25, 27, 28] },
-    ]);
-    // Each repository's Tasks as its own page groups them.
-    for (const repository of model.allTasks) {
-      expect(repository.tasks).toEqual(tasksOf(model, repository.name));
-    }
-  });
-
-  it("drops a Task marked done, as a repository page does", async () => {
-    const app = await appAfterBaseline(checkResponse(assignedFull));
-    const [, repo4] = (await app.pageModel()).allTasks;
-
-    await app.markDone(...repo4.tasks[0].tasks.map((task) => task.id), repo4.tasks[1].tasks[0].id);
-
-    const model = await app.pageModel();
-    expect(model.allTasks.map((repository) => [repository.name, repository.tasks.map((pr) => pr.number)])).toEqual([
-      ["owner-1/repo-2", [10420]],
-      ["owner-2/repo-4", [28]],
-    ]);
-    expect(tasksOf(model, "owner-2/repo-4").map((pr) => pr.number)).toEqual([28]);
-  });
-});
-
 describe("Notifications", () => {
-  it("announces a check's new Tasks, one per repository per Task kind, listing each Task's PR and who acted, oldest first", async () => {
-    // A review of mine on #25 becomes user-2's reply, and my comment on #10420
-    // becomes user-2's.
-    const response = withPR(25, (pr) => {
-      pr.reviews.nodes[1].author = { login: "user-2", __typename: "User" };
-    });
-    const pr10420 = response.data.assigned.nodes.find((node) => node.number === 10420)!;
-    pr10420.comments.nodes[0].author = { __typename: "User", login: "user-2" };
-    await stunt(fakeGitHub([checkResponse(assignedFull)]), BASELINE).check();
+  it("announces the whole Review inbox at the first check, one Notification per repository, by name", async () => {
+    const notifications = await stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)])).check();
 
-    const notifications = await stunt(
-      fakeGitHub([checkResponse(response, inboxHolding(10419, 10404, 368))]),
-      LATER,
-    ).check();
+    expect(notifications.map((notification) => notification.title)).toEqual([
+      "owner-1/repo-2: 4 new Review requests",
+      "owner-1/repo-3: 1 new Review request",
+      "owner-1/repo-5: 12 new Review requests",
+    ]);
+  });
+
+  it("announces a Review request a failed check saw only once, at the next check that succeeds", async () => {
+    const inbox = inboxHolding(368);
+    const failing = { data: null, errors: [{ type: "NOT_FOUND", path: ["viewer"], message: "Not found" }] };
+    const app = stunt(fakeGitHub([failing, checkResponse(NO_ASSIGNED, inbox), checkResponse(NO_ASSIGNED, inbox)]));
+
+    await expect(app.check()).rejects.toThrow("GitHub GraphQL query failed: Not found");
+
+    expect((await app.check()).map((notification) => notification.title)).toEqual([
+      "owner-1/repo-3: 1 new Review request",
+    ]);
+    expect(await app.check()).toEqual([]);
+  });
+
+  it("announces a check's new Review requests, one per repository, listing each PR and who requested it, oldest first", async () => {
+    const notifications = await stunt(fakeGitHub([checkResponse(assignedFull, inboxHolding(10419, 10404, 368))])).check();
 
     expect(notifications).toEqual([
       {
         repository: "owner-1/repo-2",
-        kind: "review request",
         title: "owner-1/repo-2: 2 new Review requests",
         body: "#10404 by user-3\n#10419 by user-5",
       },
       {
-        repository: "owner-1/repo-2",
-        kind: "review",
-        title: "owner-1/repo-2: 1 new review",
-        body: "#10420 by user-2",
-      },
-      {
-        repository: "owner-1/repo-2",
-        kind: "comment",
-        title: "owner-1/repo-2: 1 new comment",
-        body: "#10420 by user-2",
-      },
-      {
         repository: "owner-1/repo-3",
-        kind: "review request",
         title: "owner-1/repo-3: 1 new Review request",
         body: "#368 by user-2",
-      },
-      {
-        repository: "owner-2/repo-4",
-        kind: "review",
-        title: "owner-2/repo-4: 4 new reviews",
-        body: "#25 by user-2\n#25 by user-2\n#27 by user-2\n#28 by user-2",
-      },
-      {
-        repository: "owner-2/repo-4",
-        kind: "reply",
-        title: "owner-2/repo-4: 1 new reply",
-        body: "#25 by user-2",
       },
     ]);
   });
 
-  // Notifications reach only the tabs open when they are made, so a Task
-  // made while no tab was open is never announced.
-  it("announces each Task only at the check that makes it, across checks and restarts", async () => {
+  // Notifications reach only the tabs open when they are made, so a Review
+  // request seen while no tab was open is never announced.
+  it("announces each Review request only at the check that first sees it, across checks and restarts", async () => {
     const inbox = inboxHolding(368);
-    const first = await stunt(fakeGitHub([checkResponse(assignedFull, inbox)]), BASELINE).check();
-    const app = stunt(fakeGitHub([checkResponse(assignedFull, inbox), checkResponse(assignedFull, inbox)]), LATER);
+    const app = stunt(fakeGitHub([checkResponse(assignedFull, inbox), checkResponse(assignedFull, inbox)]));
 
+    const first = await app.check();
     const later = await app.check();
-    const latest = await app.check();
+    const restarted = await stunt(fakeGitHub([checkResponse(assignedFull, inbox)]), LATER).check();
 
-    expect(first).toEqual([
+    expect(first.map((notification) => notification.title)).toEqual(["owner-1/repo-3: 1 new Review request"]);
+    expect(later).toEqual([]);
+    expect(restarted).toEqual([]);
+  });
+
+  it("announces a re-request as a new Review request", async () => {
+    const reRequested = inboxHolding(368);
+    const [pr] = reRequested.data.inbox.nodes;
+    (pr.reviews.nodes as unknown[]).push(review("user-1", "COMMENTED", "2026-11-01T11:00:00Z"));
+    pr.timelineItems.nodes.push(requested("user-2", "user-1", "2026-11-01T11:30:00Z"));
+    const app = stunt(fakeGitHub([checkResponse(NO_ASSIGNED, inboxHolding(368)), checkResponse(NO_ASSIGNED, reRequested)]));
+
+    await app.check();
+
+    expect(await app.check()).toEqual([
       {
         repository: "owner-1/repo-3",
-        kind: "review request",
         title: "owner-1/repo-3: 1 new Review request",
         body: "#368 by user-2",
       },
     ]);
-    expect(later.map((notification) => notification.title)).toEqual([
-      "owner-1/repo-2: 1 new review",
-      "owner-2/repo-4: 4 new reviews",
-    ]);
-    expect(latest).toEqual([]);
+  });
+
+  it("announces no review on an Assigned PR", async () => {
+    await stunt(fakeGitHub([checkResponse(assignedFull)]), EARLIER).check();
+
+    expect(await stunt(fakeGitHub([checkResponse(assignedFull)]), LATER).check()).toEqual([]);
   });
 
   it("names no one for a request too old for the check to have read", async () => {
@@ -1768,7 +1169,6 @@ describe("Notifications", () => {
     expect(notifications).toEqual([
       {
         repository: "owner-1/repo-2",
-        kind: "review request",
         title: "owner-1/repo-2: 1 new Review request",
         body: "#10419",
       },
@@ -1800,7 +1200,7 @@ describe("the Issue tracker", () => {
     await clone(path.join(root, "work", "team", "three"), "ssh://git@github.com/Owner-1/Repo-3", GITLAB);
     // A missing declaration in a clone is not looked for on GitHub.
     await clone(path.join(root, "owner-2", "repo-4"), "git@github.com:owner-2/repo-4.git");
-    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, { "owner-2/repo-4": DECLARED });
+    const github = fakeGitHub([checkResponse(assignedFull)], { "owner-2/repo-4": DECLARED });
     const app = stunt(github);
 
     await app.check();
@@ -1861,7 +1261,7 @@ describe("the Issue tracker", () => {
     const missing = path.join(dir, "elsewhere", "one");
     await writeConfig({ clones: { "owner-1/repo-1": missing, "owner-1/repo-2": path.join(dir, "elsewhere", "two") } });
     await clone(path.join(home(), "repos", "repo-1"), "git@github.com:owner-1/repo-1.git", LOCAL_MARKDOWN);
-    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, { "owner-1/repo-2": DECLARED });
+    const github = fakeGitHub([checkResponse(assignedFull)], { "owner-1/repo-2": DECLARED });
     const app = stunt(github);
 
     await app.check();
@@ -1876,7 +1276,7 @@ describe("the Issue tracker", () => {
 
   it("is read from the GitHub default branch of each repository without a clone, in one query", async () => {
     await clone(path.join(home(), "repos", "repo-1"), "git@github.com:owner-1/repo-1.git", GITHUB);
-    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], repliesFull, {
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], {
       "owner-1/repo-1": UNDECLARED,
       // owner-1/repo-2 has no declaration on GitHub either.
       "owner-1/repo-3": NOT_FOUND,
@@ -2089,7 +1489,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
   };
 
   it("groups an Assigned PR under the Feature whose Ticket on the default branch links it, named after it, in Ticket order, Unfiled last", async () => {
-    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER, {}, {
+    const github = fakeGitHub([checkResponse(assignedFull)], LOCAL_MARKDOWN_TRACKER, {}, {
       "owner-2/repo-4": SCRATCHED,
     });
     const app = stunt(github);
@@ -2115,7 +1515,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
     if (ociTicket === undefined) throw new Error("no recorded oci-braintree Ticket");
     ociTicket.object.text += "\n**PR:** #28\n";
     const app = stunt(
-      fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER, {}, { "owner-2/repo-4": tree }),
+      fakeGitHub([checkResponse(assignedFull)], LOCAL_MARKDOWN_TRACKER, {}, { "owner-2/repo-4": tree }),
     );
 
     await app.check();
@@ -2131,7 +1531,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
     ["is one GitHub does not find", NOT_FOUND],
   ] as const)("leaves every Assigned PR Unfiled in a repository that %s", async (_, tree) => {
     const app = stunt(
-      fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER, {}, { "owner-2/repo-4": tree }),
+      fakeGitHub([checkResponse(assignedFull)], LOCAL_MARKDOWN_TRACKER, {}, { "owner-2/repo-4": tree }),
     );
 
     await app.check();
@@ -2149,7 +1549,6 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
     await scratch(at, "oci-braintree/issues/01-skip-stripe-steps.md", "# 01. Skip Stripe steps\n\n**PR:** #10420\n");
     const github = fakeGitHub(
       [checkResponse(assignedFull)],
-      repliesFull,
       { ...LOCAL_MARKDOWN_TRACKER, "owner-1/repo-3": LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"] },
       {},
       { "owner-2/repo-4": SCRATCHED, "owner-1/repo-2": SCRATCHED },
@@ -2181,7 +1580,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
       "git@github.com:owner-2/repo-4.git",
       LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"].object.text,
     );
-    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, { "owner-1/repo-2": DECLARED });
+    const github = fakeGitHub([checkResponse(assignedFull)], { "owner-1/repo-2": DECLARED });
 
     await stunt(github).check();
 
@@ -2190,7 +1589,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
 
   it("asks GitHub for no .scratch tree of a repository with only Review inbox PRs", async () => {
     // owner-1/repo-5 has Review inbox PRs and no Assigned PR.
-    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], repliesFull, {
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], {
       "owner-1/repo-5": LOCAL_MARKDOWN_TRACKER["owner-2/repo-4"],
     });
 
@@ -2200,7 +1599,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
   });
 
   it("fails a check on any other GitHub error reading a .scratch tree", async () => {
-    const github = fakeGitHub([checkResponse(assignedFull)], repliesFull, LOCAL_MARKDOWN_TRACKER);
+    const github = fakeGitHub([checkResponse(assignedFull)], LOCAL_MARKDOWN_TRACKER);
     const answer = github.graphql;
     github.graphql = async (query, variables) => {
       if (query.startsWith("query Scratch")) return { errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] };
@@ -2223,7 +1622,7 @@ describe("Feature grouping in a GitHub repository", () => {
   it("groups a PR under the parent, named after it, of the issue its body closes, with Unfiled last", async () => {
     const response = withPR(10420, withBody("## What\n\nThe change.\n\nCloses #12\n"));
     const app = stunt(
-      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, { "owner-1/repo-2#12": PARENTED }),
+      fakeGitHub([checkResponse(response)], GITHUB_TRACKER, { "owner-1/repo-2#12": PARENTED }),
     );
 
     await app.check();
@@ -2237,7 +1636,7 @@ describe("Feature grouping in a GitHub repository", () => {
   it("makes an issue with no parent the Feature, named after it, of a PR whose body says it is part of it", async () => {
     const response = withPR(9968, withBody("Part of #1\n\n## What\n\nThe change.\n"));
     const app = stunt(
-      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, { "owner-1/repo-2#1": PARENTLESS }),
+      fakeGitHub([checkResponse(response)], GITHUB_TRACKER, { "owner-1/repo-2#1": PARENTLESS }),
     );
 
     await app.check();
@@ -2256,7 +1655,7 @@ describe("Feature grouping in a GitHub repository", () => {
     withBody("Part of #1")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
     withBody("Closes #3")(response.data.assigned.nodes.find((pr) => pr.number === 9968) as object);
     const app = stunt(
-      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, {
+      fakeGitHub([checkResponse(response)], GITHUB_TRACKER, {
         "owner-1/repo-2#12": PARENTED,
         "owner-1/repo-2#1": PARENTLESS,
         "owner-1/repo-2#3": { ...PARENTED, url: "https://github.com/owner-1/repo-2/issues/3", title: "Ticket 2" },
@@ -2276,7 +1675,7 @@ describe("Feature grouping in a GitHub repository", () => {
     withBody("Closes #20")(response.data.assigned.nodes.find((pr) => pr.number === 10420) as object);
     withBody("Closes #12")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
     const app = stunt(
-      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, {
+      fakeGitHub([checkResponse(response)], GITHUB_TRACKER, {
         "owner-1/repo-2#12": PARENTED,
         // Feature 2 keeps Feature 1's recorded Tickets, which order nothing
         // here.
@@ -2307,7 +1706,7 @@ describe("Feature grouping in a GitHub repository", () => {
     withBody("Closes #12")(response.data.inbox.nodes.find((pr) => pr.number === 10306) as object);
     withBody("Closes #3")(response.data.inbox.nodes.find((pr) => pr.number === 10419) as object);
     const app = stunt(
-      fakeGitHub([checkResponse(assignedFull, response)], repliesFull, GITHUB_TRACKER, {
+      fakeGitHub([checkResponse(assignedFull, response)], GITHUB_TRACKER, {
         "owner-1/repo-2#12": PARENTED,
         "owner-1/repo-2#3": { ...PARENTED, url: "https://github.com/owner-1/repo-2/issues/3", title: "Ticket 2" },
         "owner-1/repo-2#20": { ...PARENTLESS, url: "https://github.com/owner-1/repo-2/issues/20", title: "Feature 2" },
@@ -2332,7 +1731,7 @@ describe("Feature grouping in a GitHub repository", () => {
     withBody("Closes #12")(inbox.data.inbox.nodes.find((pr) => pr.number === 10419) as object);
     // owner-2/repo-4 declares no Issue tracker.
     withBody("Closes #12")(assigned.data.assigned.nodes.find((pr) => pr.number === 25) as object);
-    const github = fakeGitHub([checkResponse(assigned, inbox)], repliesFull, GITHUB_TRACKER, {
+    const github = fakeGitHub([checkResponse(assigned, inbox)], GITHUB_TRACKER, {
       "owner-1/repo-2#12": PARENTED,
       "owner-1/repo-2#1": PARENTLESS,
     });
@@ -2348,7 +1747,7 @@ describe("Feature grouping in a GitHub repository", () => {
   });
 
   it("asks GitHub for no Ticket when no PR names one", async () => {
-    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], repliesFull, GITHUB_TRACKER);
+    const github = fakeGitHub([checkResponse(assignedFull, inboxFull)], GITHUB_TRACKER);
 
     await stunt(github).check();
 
@@ -2362,7 +1761,7 @@ describe("Feature grouping in a GitHub repository", () => {
     );
     withBody("## What\n\nPart of #1\nCloses #12\n")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
     withBody("closes #12\n")(response.data.assigned.nodes.find((pr) => pr.number === 9968) as object);
-    const github = fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, {
+    const github = fakeGitHub([checkResponse(response)], GITHUB_TRACKER, {
       "owner-1/repo-2#1": PARENTLESS,
       "owner-1/repo-2#12": PARENTED,
     });
@@ -2379,7 +1778,7 @@ describe("Feature grouping in a GitHub repository", () => {
   it("leaves a PR Unfiled when GitHub does not find the issue its body names", async () => {
     const response = withPR(10420, withBody("Closes #99999"));
     const app = stunt(
-      fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER, { "owner-1/repo-2#99999": NOT_FOUND }),
+      fakeGitHub([checkResponse(response)], GITHUB_TRACKER, { "owner-1/repo-2#99999": NOT_FOUND }),
     );
 
     await app.check();
@@ -2391,7 +1790,7 @@ describe("Feature grouping in a GitHub repository", () => {
 
   it("fails a check on any other GitHub error reading Tickets", async () => {
     const response = withPR(10420, withBody("Closes #12"));
-    const github = fakeGitHub([checkResponse(response)], repliesFull, GITHUB_TRACKER);
+    const github = fakeGitHub([checkResponse(response)], GITHUB_TRACKER);
     const answer = github.graphql;
     github.graphql = async (query, variables) => {
       if (query.startsWith("query Tickets")) return { errors: [{ type: "RATE_LIMITED", message: "API rate limit exceeded" }] };
@@ -2458,11 +1857,14 @@ describe("checking on a schedule", () => {
     const inbox = inboxHolding(368);
     const github = fakeGitHub([checkResponse(NO_ASSIGNED, inbox), checkResponse(NO_ASSIGNED, inbox)]);
     const app = stunt(github);
-    const heard: { titles: string[]; tasks: number }[] = [];
+    const heard: { titles: string[]; repositories: number }[] = [];
 
     const stop = await app.start(async (notifications) => {
       const model = await app.pageModel();
-      heard.push({ titles: notifications.map((notification) => notification.title), tasks: model.allTasks.length });
+      heard.push({
+        titles: notifications.map((notification) => notification.title),
+        repositories: model.repositories.length,
+      });
     });
     await checked(github, 1);
     await until(() => heard.length === 1);
@@ -2471,8 +1873,8 @@ describe("checking on a schedule", () => {
     await until(() => heard.length === 2);
 
     expect(heard).toEqual([
-      { titles: ["owner-1/repo-3: 1 new Review request"], tasks: 1 },
-      { titles: [], tasks: 1 },
+      { titles: ["owner-1/repo-3: 1 new Review request"], repositories: 1 },
+      { titles: [], repositories: 1 },
     ]);
     stop();
   });

@@ -1,8 +1,7 @@
 import type { State } from "../data/store.ts";
-import type { AssignedPR, Review, ReviewInboxPR } from "../github/prs.ts";
+import { type AssignedPR, type Review, type ReviewInboxPR, requestTime } from "../github/prs.ts";
 import type { FeatureLink } from "./features.ts";
 import type { IssueTracker } from "./issue-trackers.ts";
-import { requestTime, type Task, taskActor, taskTime } from "./tasks.ts";
 
 export type ReviewStatus = "review required" | "approved" | "changes requested";
 
@@ -13,7 +12,13 @@ export type AssignedPRRow = {
   author: string;
   draft: boolean;
   reviewStatus: ReviewStatus;
-  openTasks: number;
+  // Pending review, so the row shows that in place of its reviewers.
+  pendingReview: boolean;
+  // Where each reviewer stands: their standing verdict or comment, most
+  // recent first, then everyone a review is still requested from, as GitHub
+  // lists them. A reviewer still requested is pending whatever they said
+  // before, and a dismissed verdict stands for no one.
+  reviewers: ReviewerRow[];
   updatedAgo: string;
   // Each reviewer's latest review, most recent first.
   reviews: ReviewRow[];
@@ -38,6 +43,12 @@ export type ReviewRow = {
   submittedAgo: string;
 };
 
+export type ReviewerRow = {
+  // A user login, or a team slug when pending.
+  reviewer: string;
+  state: "approved" | "changes requested" | "commented" | "pending";
+};
+
 const REVIEW_STATES = {
   APPROVED: "approved",
   CHANGES_REQUESTED: "changes requested",
@@ -57,35 +68,13 @@ export type ReviewInboxRow = {
   reRequest: boolean;
 };
 
-// A PR's open Tasks, oldest first.
-export type TaskGroup = {
-  number: number;
-  title: string;
-  url: string;
-  tasks: TaskRow[];
-};
-
-export type TaskRow = {
-  id: string;
-  kind: Task["kind"];
-  // Where on GitHub to act on it: a Review request opens the PR's Files
-  // changed tab, any other Task the exact review, reply, or comment.
-  url: string;
-  // Who made the request or posted the activity, and how long ago. Null when
-  // a request is too old for the check to have read.
-  by: string | null;
-  ago: string | null;
-};
-
 export type RepositoryModel = {
   name: string;
   // The Issue tracker its PRs are grouped by, null when it declares none
   // stunt groups by, which leaves every PR Unfiled.
   issueTracker: IssueTracker | null;
-  // How many open Tasks, Assigned PRs, and Review inbox PRs it holds.
-  counts:{ tasks: number; assignedPRs: number; reviewInbox: number };
-  // Grouped by PR, the PR with the oldest Task first.
-  tasks: TaskGroup[];
+  // How many Assigned PRs and Review inbox PRs it holds.
+  counts: { assignedPRs: number; reviewInbox: number };
   // Grouped by Feature, the Feature with the most recently updated PR first,
   // each Feature's PRs in Ticket order, then Unfiled, most recently updated
   // first.
@@ -96,18 +85,18 @@ export type RepositoryModel = {
   reviewInbox: ReviewInboxGroup[];
 };
 
-// A repository's open Tasks in the All Tasks view.
-export type RepositoryTasks = Pick<RepositoryModel, "name" | "tasks">;
+// One row of the dashboard: an owner's repositories, by name.
+export type OwnerRow = {
+  owner: string;
+  repositories: Pick<RepositoryModel, "name" | "counts">[];
+};
 
 export type PageModel = {
   checkedAt?: string;
   // The sidebar's repositories, by name.
   repositories: RepositoryModel[];
-  // The repository the home page opens: the one with the most open Tasks, the
-  // first by name among those tied. Unset with no repositories.
-  landingRepository?: string;
-  // Every repository with open Tasks, in sidebar order.
-  allTasks: RepositoryTasks[];
+  // The repositories by owner, owners by name.
+  dashboard: OwnerRow[];
 };
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
@@ -166,46 +155,24 @@ function reviewStatus(pr: AssignedPR, reviews: Review[]): ReviewStatus {
   return "review required";
 }
 
-function taskRow(task: Task, now: Date): TaskRow {
-  const row = { id: task.id, kind: task.kind, by: taskActor(task) };
-  if (task.kind !== "review request") {
-    const { at, url } = task.activity;
-    return { ...row, url, ago: timeAgo(at, now) };
-  }
-  return {
-    ...row,
-    url: `${task.url}/files`,
-    ago: task.request === null ? null : timeAgo(task.request.waitingSince, now),
-  };
-}
-
-function openTasks(state: State): Task[] {
-  return state.tasks.filter((task) => task.state === "open");
-}
-
-// Every repository with an Assigned PR, a Review inbox PR, or an open Task.
+// Every repository with an Assigned PR or a Review inbox PR.
 function repositoryNames(state: State): string[] {
-  const names = new Set([...state.assignedPRs, ...state.reviewInbox, ...openTasks(state)].map((pr) => pr.repository));
-  return [...names];
+  return [...new Set([...state.assignedPRs, ...state.reviewInbox].map((pr) => pr.repository))];
 }
 
-function taskGroups(tasks: Task[], now: Date): TaskGroup[] {
-  const groups = new Map<number, TaskGroup>();
-  for (const task of tasks.toSorted((a, b) => taskTime(a) - taskTime(b))) {
-    let group = groups.get(task.number);
-    if (group === undefined) {
-      group = { number: task.number, title: task.title, url: task.url, tasks: [] };
-      groups.set(task.number, group);
-    }
-    group.tasks.push(taskRow(task, now));
-  }
-  return [...groups.values()];
+function reviewerRows(pr: AssignedPR, latestFirst: Review[]): ReviewerRow[] {
+  const pending = new Set(pr.pendingReviewers);
+  const reviewed = latestFirst.flatMap((review): ReviewerRow[] =>
+    review.state === "DISMISSED" || pending.has(review.author)
+      ? []
+      : [{ reviewer: review.author, state: REVIEW_STATES[review.state] }],
+  );
+  return [...reviewed, ...pr.pendingReviewers.map((reviewer) => ({ reviewer, state: "pending" as const }))];
 }
 
-// An Assigned PR's row, counting its open Tasks among the repository's
-// `tasks`.
-function assignedPRRow(pr: AssignedPR, tasks: Task[], now: Date): AssignedPRRow {
+function assignedPRRow(pr: AssignedPR, now: Date): AssignedPRRow {
   const reviews = standingReviews(pr);
+  const latestFirst = reviews.toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt));
   return {
     number: pr.number,
     title: pr.title,
@@ -213,15 +180,14 @@ function assignedPRRow(pr: AssignedPR, tasks: Task[], now: Date): AssignedPRRow 
     author: pr.author,
     draft: pr.draft,
     reviewStatus: reviewStatus(pr, reviews),
-    openTasks: tasks.filter((task) => task.number === pr.number).length,
+    pendingReview: pr.pendingReview,
+    reviewers: reviewerRows(pr, latestFirst),
     updatedAgo: timeAgo(pr.updatedAt, now),
-    reviews: reviews
-      .toSorted((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))
-      .map((review) => ({
-        reviewer: review.author,
-        state: REVIEW_STATES[review.state],
-        submittedAgo: timeAgo(review.submittedAt, now),
-      })),
+    reviews: latestFirst.map((review) => ({
+      reviewer: review.author,
+      state: REVIEW_STATES[review.state],
+      submittedAgo: timeAgo(review.submittedAt, now),
+    })),
     pendingReviewers: pr.pendingReviewers,
   };
 }
@@ -259,9 +225,23 @@ function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
   return unfiled.length === 0 ? groups : [...groups, { feature: null, prs: unfiled.toSorted(order).map(row) }];
 }
 
+// `repositories`, in order, under their owners, owners by name.
+function dashboard(repositories: RepositoryModel[]): OwnerRow[] {
+  const owners = new Map<string, OwnerRow>();
+  for (const { name, counts } of repositories) {
+    const owner = name.slice(0, name.indexOf("/"));
+    let row = owners.get(owner);
+    if (row === undefined) {
+      row = { owner, repositories: [] };
+      owners.set(owner, row);
+    }
+    row.repositories.push({ name, counts });
+  }
+  return [...owners.values()].sort((a, b) => a.owner.localeCompare(b.owner));
+}
+
 export function pageModel(state: State, now: Date): PageModel {
   const repositories = repositoryNames(state).map((name): RepositoryModel => {
-    const tasks = openTasks(state).filter((task) => task.repository === name);
     const assignedPRs = state.assignedPRs.filter((pr) => pr.repository === name);
     const reviewInbox = state.reviewInbox.filter((pr) => pr.repository === name);
     const issueTracker = state.issueTrackers[name] ?? null;
@@ -269,13 +249,12 @@ export function pageModel(state: State, now: Date): PageModel {
     return {
       name,
       issueTracker,
-      counts: { tasks: tasks.length, assignedPRs: assignedPRs.length, reviewInbox: reviewInbox.length },
-      tasks: taskGroups(tasks, now),
+      counts: { assignedPRs: assignedPRs.length, reviewInbox: reviewInbox.length },
       assignedPRs: featureGroups(
         assignedPRs,
         links,
         (a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt),
-        (pr) => assignedPRRow(pr, tasks, now),
+        (pr) => assignedPRRow(pr, now),
       ),
       // Only a GitHub repository groups its Review inbox by Feature.
       reviewInbox: featureGroups(
@@ -295,15 +274,5 @@ export function pageModel(state: State, now: Date): PageModel {
   });
   repositories.sort((a, b) => a.name.localeCompare(b.name));
 
-  const landingRepository = repositories.reduce<RepositoryModel | undefined>(
-    (busiest, repository) =>
-      busiest === undefined || repository.counts.tasks > busiest.counts.tasks ? repository : busiest,
-    undefined,
-  )?.name;
-
-  const allTasks = repositories
-    .filter((repository) => repository.counts.tasks > 0)
-    .map(({ name, tasks }) => ({ name, tasks }));
-
-  return { checkedAt: state.checkedAt, repositories, landingRepository, allTasks };
+  return { checkedAt: state.checkedAt, repositories, dashboard: dashboard(repositories) };
 }

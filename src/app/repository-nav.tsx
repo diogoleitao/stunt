@@ -1,6 +1,6 @@
 "use client";
 
-import { GitPullRequest, Inbox, ListTodo } from "lucide-react";
+import { GitPullRequest, Inbox } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -8,29 +8,45 @@ import { cn } from "@/lib/utils";
 import type { RepositoryModel } from "../stunt/page-model.ts";
 import { repositoryHref } from "./repository-href.ts";
 
-const ALL_TASKS_HREF = "/tasks";
+const DASHBOARD_HREF = "/";
 
-// The sidebar's links: the All Tasks view, then each repository with its open
-// Task, Assigned PR, and Review inbox counts, marking the one on screen.
+type Counts = RepositoryModel["counts"];
+
+// The sidebar's links: the dashboard with the totals of every repository,
+// then each repository with its Assigned PR and Review inbox counts, marking
+// the one on screen.
 export function RepositoryNav({ repositories }: { repositories: Pick<RepositoryModel, "name" | "counts">[] }) {
   const pathname = usePathname();
-  const openTaskTotal = repositories.reduce((total, repository) => total + repository.counts.tasks, 0);
+  const totals = repositories.reduce<Counts>(
+    (total, { counts }) => ({
+      assignedPRs: total.assignedPRs + counts.assignedPRs,
+      reviewInbox: total.reviewInbox + counts.reviewInbox,
+    }),
+    { assignedPRs: 0, reviewInbox: 0 },
+  );
   return (
     <nav aria-label="Repositories" className="flex flex-col gap-0.5 p-2">
-      <NavLink href={ALL_TASKS_HREF} current={pathname === ALL_TASKS_HREF} label="All Tasks">
-        <Count title="Open Tasks" icon={<ListTodo />} value={openTaskTotal} />
+      <NavLink href={DASHBOARD_HREF} current={pathname === DASHBOARD_HREF} label="Dashboard">
+        <CountPair counts={totals} />
       </NavLink>
       {repositories.map(({ name, counts }) => {
         const href = repositoryHref(name);
         return (
           <NavLink key={name} href={href} current={pathname === href} label={name}>
-            <Count title="Open Tasks" icon={<ListTodo />} value={counts.tasks} />
-            <Count title="Assigned PRs" icon={<GitPullRequest />} value={counts.assignedPRs} />
-            <Count title="Review inbox" icon={<Inbox />} value={counts.reviewInbox} />
+            <CountPair counts={counts} />
           </NavLink>
         );
       })}
     </nav>
+  );
+}
+
+function CountPair({ counts }: { counts: Counts }) {
+  return (
+    <>
+      <Count title="Assigned PRs" icon={<GitPullRequest />} value={counts.assignedPRs} />
+      <Count title="Review inbox" icon={<Inbox />} value={counts.reviewInbox} />
+    </>
   );
 }
 

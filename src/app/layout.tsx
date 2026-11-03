@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 import { appStunt } from "./app-stunt.ts";
@@ -21,9 +20,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         <div className="flex min-h-svh">
           <aside className="flex w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
             <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
-              <Link href="/" className="font-semibold tracking-tight">
-                stunt
-              </Link>
+              <span className="font-semibold tracking-tight">stunt</span>
               <div className="flex items-center">
                 <LiveUpdates />
               </div>

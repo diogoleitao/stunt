@@ -4,15 +4,14 @@ import { ifExists, writeFileAtomically } from "../fs.ts";
 import type { CheckedPRs } from "../github/prs.ts";
 import type { FeatureLink } from "../stunt/features.ts";
 import type { IssueTracker } from "../stunt/issue-trackers.ts";
-import type { Task } from "../stunt/tasks.ts";
 
-// What the last check saw, the Baseline, and every Task ever made, done and
-// expired ones included, so no activity becomes a Task twice. Before the
-// first check there is no checkedAt, no Baseline, no PR, and no Task.
+// What the last check saw. Before the first check there is no checkedAt and
+// no PR.
 export type State = CheckedPRs & {
   checkedAt?: string;
-  baseline?: string;
-  tasks: Task[];
+  // The ids of the Review requests already announced, of those still in the
+  // Review inbox, so none is announced twice.
+  announced: string[];
   // The Issue tracker of each repository the last check saw that declares
   // one stunt groups by.
   issueTrackers: Record<string, IssueTracker>;
@@ -21,7 +20,7 @@ export type State = CheckedPRs & {
   featureLinks: Record<string, FeatureLink[]>;
 };
 
-const EMPTY: State = { assignedPRs: [], reviewInbox: [], tasks: [], issueTrackers: {}, featureLinks: {} };
+const EMPTY: State = { assignedPRs: [], reviewInbox: [], announced: [], issueTrackers: {}, featureLinks: {} };
 
 export function defaultDataDir(home: string): string {
   return path.join(home, ".local", "share", "stunt");
@@ -38,16 +37,21 @@ export function openStore(dataDir: string) {
   async function load(): Promise<State> {
     const text = await ifExists(readFile(statePath, "utf8"));
     if (text === undefined) return EMPTY;
-    // A state saved before the Review inbox, Tasks, Issue trackers, or
-    // Feature links existed has none.
-    return { ...EMPTY, ...(JSON.parse(text) as Partial<State>) };
+    // A state saved before the Review inbox, announced Review requests, Issue
+    // trackers, or Feature links existed has none. One saved while Tasks
+    // existed holds Tasks and a Baseline, which are left out.
+    const { tasks: _tasks, baseline: _baseline, ...stored } = JSON.parse(text) as Partial<State> & {
+      tasks?: unknown;
+      baseline?: unknown;
+    };
+    return { ...EMPTY, ...stored };
   }
 
   return {
     load,
 
     // Loads the state, changes it, and saves it, after every change queued
-    // before it, so a check and a Task marked done never overwrite each other.
+    // before it, so two changes never overwrite each other.
     update(change: (state: State) => State): Promise<void> {
       const previous = queues.get(statePath) ?? Promise.resolve();
       const next = previous

@@ -35,10 +35,10 @@ export function LiveUpdates() {
       const { sentAt, notifications } = JSON.parse(event.data) as LiveUpdate;
       router.refresh();
       if (!supported() || Notification.permission !== "granted") return;
-      for (const { repository, kind, title, body } of notifications) {
-        // Every open tab shows the same Notifications; one tag per check,
-        // repository, and kind shows each once.
-        const shown = new Notification(title, { body, tag: `${sentAt} ${repository} ${kind}` });
+      for (const { repository, title, body } of notifications) {
+        // Every open tab shows the same Notifications; one tag per check and
+        // repository shows each once.
+        const shown = new Notification(title, { body, tag: `${sentAt} ${repository}` });
         shown.onclick = () => {
           window.focus();
           router.push(repositoryHref(repository));

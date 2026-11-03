@@ -1,60 +1,42 @@
-import { type Task, taskActor, taskTime } from "./tasks.ts";
+import { requestTime, type ReviewInboxPR } from "../github/prs.ts";
 
-// The desktop announcement of a repository's new Tasks of one kind.
+// The desktop announcement of a repository's new Review requests.
 export type Notification = {
   repository: string;
-  kind: Task["kind"];
-  // Such as "owner/repo: 2 new reviews".
+  // Such as "owner/repo: 2 new Review requests".
   title: string;
-  // One line per Task, oldest first, with its PR and who acted, such as
-  // "#42 by octocat". A request too old for the check to have read names
-  // no one.
+  // One line per Review request, oldest first, with its PR and who made it,
+  // such as "#42 by octocat". A request too old for the check to have read
+  // names no one.
   body: string;
 };
 
-// Each Task kind's noun, in the order Notifications announce them.
-const NOUNS: Record<Task["kind"], [one: string, many: string]> = {
-  "review request": ["Review request", "Review requests"],
-  review: ["review", "reviews"],
-  reply: ["reply", "replies"],
-  comment: ["comment", "comments"],
-};
-
-const KINDS = Object.keys(NOUNS) as Task["kind"][];
-
-function line(task: Task): string {
-  const by = taskActor(task);
-  return by === null ? `#${task.number}` : `#${task.number} by ${by}`;
+// A Review request's identity: its PR and when it was made, so a re-request
+// is a new Review request.
+export function reviewRequestId(pr: ReviewInboxPR): string {
+  return `${pr.repository}#${pr.number} ${pr.request?.requestedAt ?? "unknown"}`;
 }
 
-// The Notifications announcing `tasks`, one per repository per Task kind,
-// repositories by name, then kinds in the order Review request, review,
-// reply, comment.
-export function notifications(tasks: Task[]): Notification[] {
-  const sorted = tasks.toSorted(
-    (a, b) =>
-      a.repository.localeCompare(b.repository) ||
-      KINDS.indexOf(a.kind) - KINDS.indexOf(b.kind) ||
-      taskTime(a) - taskTime(b),
-  );
-  const groups = new Map<string, Task[]>();
-  for (const task of sorted) {
-    const key = `${task.repository} ${task.kind}`;
-    let group = groups.get(key);
+function line(pr: ReviewInboxPR): string {
+  return pr.request === null ? `#${pr.number}` : `#${pr.number} by ${pr.request.by}`;
+}
+
+// The Notifications announcing the Review requests of `prs`, one per
+// repository, repositories by name.
+export function notifications(prs: ReviewInboxPR[]): Notification[] {
+  const sorted = prs.toSorted((a, b) => a.repository.localeCompare(b.repository) || requestTime(a) - requestTime(b));
+  const groups = new Map<string, ReviewInboxPR[]>();
+  for (const pr of sorted) {
+    let group = groups.get(pr.repository);
     if (group === undefined) {
       group = [];
-      groups.set(key, group);
+      groups.set(pr.repository, group);
     }
-    group.push(task);
+    group.push(pr);
   }
-  return [...groups.values()].map((group) => {
-    const { repository, kind } = group[0];
-    const [one, many] = NOUNS[kind];
-    return {
-      repository,
-      kind,
-      title: `${repository}: ${group.length} new ${group.length === 1 ? one : many}`,
-      body: group.map(line).join("\n"),
-    };
-  });
+  return [...groups].map(([repository, group]) => ({
+    repository,
+    title: `${repository}: ${group.length} new ${group.length === 1 ? "Review request" : "Review requests"}`,
+    body: group.map(line).join("\n"),
+  }));
 }

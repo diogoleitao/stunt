@@ -5,21 +5,24 @@ import { Fragment, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import type { AssignedPRGroup, AssignedPRRow, ReviewRow, ReviewStatus } from "../stunt/page-model.ts";
+import type { AssignedPRGroup, AssignedPRRow, ReviewerRow, ReviewRow, ReviewStatus } from "../stunt/page-model.ts";
 import { Badge } from "./badge.tsx";
 import { FeatureGroups } from "./feature-groups.tsx";
 
-const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"], string> = {
+const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"] | ReviewerRow["state"], string> = {
   "review required": "border-border text-muted-foreground",
   approved: "border-emerald-600/30 bg-emerald-600/10 text-emerald-700 dark:text-emerald-400",
   "changes requested": "border-destructive/30 bg-destructive/10 text-destructive",
   commented: "border-border text-muted-foreground",
   dismissed: "border-border text-muted-foreground line-through",
+  pending: "border-dashed border-border text-muted-foreground",
 };
 
-// A repository's Assigned PRs, under their Feature headings. Opening a row
-// shows each reviewer's latest review and who a review is still requested
-// from.
+const PENDING_REVIEW_STYLE = "border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400";
+
+// A repository's Assigned PRs, under their Feature headings. A row shows
+// Pending review, or else where each reviewer stands. Opening a row shows
+// each reviewer's latest review and who a review is still requested from.
 export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
 
@@ -42,7 +45,7 @@ export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
           <TableHead>Title</TableHead>
           <TableHead>Author</TableHead>
           <TableHead>Review status</TableHead>
-          <TableHead className="text-right">Tasks</TableHead>
+          <TableHead>Reviewers</TableHead>
           <TableHead className="text-right">Updated</TableHead>
         </TableRow>
       }
@@ -86,10 +89,8 @@ export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
                 <TableCell>
                   <Badge className={STATE_STYLES[pr.reviewStatus]}>{pr.reviewStatus}</Badge>
                 </TableCell>
-                <TableCell
-                  className={cn("text-right tabular-nums", pr.openTasks === 0 ? "text-muted-foreground" : "font-medium")}
-                >
-                  {pr.openTasks}
+                <TableCell>
+                  <Reviewers pr={pr} />
                 </TableCell>
                 <TableCell className="text-right text-muted-foreground">{pr.updatedAgo}</TableCell>
               </TableRow>
@@ -106,6 +107,17 @@ export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
         })
       }
     />
+  );
+}
+
+function Reviewers({ pr }: { pr: AssignedPRRow }) {
+  if (pr.pendingReview) return <Badge className={PENDING_REVIEW_STYLE}>pending review</Badge>;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {pr.reviewers.map(({ reviewer, state }) => (
+        <Badge key={reviewer} className={STATE_STYLES[state]}>{`${reviewer} ${state}`}</Badge>
+      ))}
+    </div>
   );
 }
 

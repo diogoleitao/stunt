@@ -1,5 +1,5 @@
 import type { GitHubClient } from "./client.ts";
-import { dataOf, type GraphQLError, issueParameters, issueVariables } from "./graphql.ts";
+import { dataOf } from "./graphql.ts";
 
 export type AssignedPR = {
   repository: string;
@@ -15,6 +15,9 @@ export type AssignedPR = {
   reviews: Review[];
   // Who a review is still requested from: user logins and team slugs.
   pendingReviewers: string[];
+  // Someone else authored it, and a direct Review request for the viewer is
+  // pending on it or the viewer never submitted a review on it.
+  pendingReview: boolean;
   // The issue its body names as its Ticket, null when it names none.
   ticket: number | null;
 };
@@ -38,21 +41,10 @@ export type ReviewInboxPR = {
   reRequest: boolean;
 };
 
-// Activity on an Assigned PR that can make a Task: a submitted review that
-// was not dismissed, a review that only holds replies to existing threads,
-// or a conversation comment.
-export type Activity = {
-  // GitHub's id of the review or comment.
-  id: string;
-  kind: "review" | "reply" | "comment";
-  repository: string;
-  number: number;
-  by: string;
-  // When it was submitted or created.
-  at: string;
-  // Where it is on GitHub: the review, its first reply, or the comment.
-  url: string;
-};
+// A request too old for the check to have read is older than any other.
+export function requestTime({ request }: Pick<ReviewInboxPR, "request">): number {
+  return request === null ? -Infinity : Date.parse(request.waitingSince);
+}
 
 export type ReviewDecision = "REVIEW_REQUIRED" | "APPROVED" | "CHANGES_REQUESTED";
 
@@ -66,71 +58,26 @@ export type Review = {
 // overflows.
 const PAGE_SIZE = 100;
 
-// A PR a check looks up by its repository and number, because it has open
-// Tasks.
+// A PR by its repository and number.
 export type PRRef = { repository: string; number: number };
 
-// What a PR with open Tasks looks like now.
-export type TrackedPR = PRRef & {
-  // Neither merged nor closed. A PR GitHub no longer finds is not open.
-  open: boolean;
-  // When the viewer submitted each of their reviews. Pending reviews are
-  // left out.
-  viewerReviews: string[];
-  // The direct Review request still pending for the viewer, with when it was
-  // made, null when it is older than the events the query reads. Null when
-  // none is pending.
-  pendingRequest: { requestedAt: string | null } | null;
-};
-
 // One check: the viewer, every open PR listing the viewer as an assignee,
-// drafts included, whoever authored it, every open PR with a Review request
-// for the viewer, and each PR in `lookups` by its repository and number. The
-// search index lags behind merges, closes, and withdrawn requests, so each
-// PR's own state and pending requests are fetched too. A page that overflows
-// is followed by querying only its own search.
-function checkQuery(lookups: number): string {
-  const variables = issueParameters(lookups);
-  const tracked = Array.from({ length: lookups }, (_, i) => i)
-    .map(
-      (i) => `
-  tracked${i}: repository(owner: $owner${i}, name: $name${i}) {
-    pullRequest(number: $number${i}) { ...InboxPR }
-  }`,
-    )
-    .join("");
-  return `query Check($first: Int!, $assigned: Boolean!, $assignedAfter: String, $inbox: Boolean!, $inboxAfter: String${variables}) {
-  viewer { login }${tracked}
+// drafts included, whoever authored it, and every open PR with a Review
+// request for the viewer. The search index lags behind merges, closes, and
+// withdrawn requests, so each PR's own state and pending requests are fetched
+// too. A page that overflows is followed by querying only its own search.
+const CHECK_QUERY = `query Check($first: Int!, $assigned: Boolean!, $assignedAfter: String, $inbox: Boolean!, $inboxAfter: String) {
+  viewer { login }
   assigned: search(query: "is:pr is:open assignee:@me", type: ISSUE, first: $first, after: $assignedAfter) @include(if: $assigned) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      ... on PullRequest { ...AssignedPR }
+      ... on PullRequest { ...PR }
     }
   }
   inbox: search(query: "is:pr is:open user-review-requested:@me", type: ISSUE, first: $first, after: $inboxAfter) @include(if: $inbox) {
     pageInfo { hasNextPage endCursor }
     nodes {
       ... on PullRequest { ...InboxPR }
-    }
-  }
-}
-
-fragment AssignedPR on PullRequest {
-  ...PR
-  reviews(last: 100) {
-    nodes {
-      id
-      url
-      body
-      author { __typename }
-    }
-  }
-  comments(last: 100) {
-    nodes {
-      id
-      url
-      createdAt
-      author { __typename login }
     }
   }
 }
@@ -185,7 +132,6 @@ fragment PR on PullRequest {
     }
   }
 }`;
-}
 
 type RequestedReviewer =
   | { __typename: "User" | "Bot" | "Mannequin"; login: string }
@@ -196,7 +142,7 @@ type ReviewNode =
   | { state: Review["state"]; submittedAt: string; author: { login: string } | null }
   | { state: "PENDING"; submittedAt: null; author: { login: string } | null };
 
-type PRNode<Reviews extends ReviewNode = ReviewNode> = {
+type PRNode = {
   number: number;
   state: "OPEN" | "CLOSED" | "MERGED";
   isDraft: boolean;
@@ -207,15 +153,8 @@ type PRNode<Reviews extends ReviewNode = ReviewNode> = {
   author: { login: string } | null;
   repository: { nameWithOwner: string };
   reviewDecision: ReviewDecision | null;
-  reviews: { nodes: Reviews[] };
+  reviews: { nodes: ReviewNode[] };
   reviewRequests: { nodes: { requestedReviewer: RequestedReviewer }[] };
-};
-
-// An author with their type, which tells bots apart.
-type TypedAuthor = { __typename: string; login: string } | null;
-
-type AssignedNode = PRNode<ReviewNode & { id: string; url: string; body: string; author: TypedAuthor }> & {
-  comments: { nodes: { id: string; url: string; createdAt: string; author: TypedAuthor }[] };
 };
 
 type InboxNode = PRNode & {
@@ -233,19 +172,12 @@ type SearchPage<Node> = {
 
 type CheckData = {
   viewer: { login: string };
-  assigned?: SearchPage<AssignedNode>;
+  assigned?: SearchPage<PRNode>;
   inbox?: SearchPage<InboxNode>;
-  [lookup: `tracked${number}`]: { pullRequest: InboxNode | null } | null | undefined;
 };
 
-// A looked up PR GitHub no longer finds, because it or its repository was
-// deleted or the viewer lost access, is no error: its lookup is null.
-function isLookupNotFound(error: GraphQLError): boolean {
-  return error.type === "NOT_FOUND" && /^tracked\d+$/.test(String(error.path?.[0]));
-}
-
 function decode(body: unknown): CheckData {
-  const data = dataOf<CheckData>(body, isLookupNotFound);
+  const data = dataOf<CheckData>(body);
   if (data?.viewer === undefined) throw new Error("GitHub GraphQL response has no viewer");
   return data;
 }
@@ -284,7 +216,8 @@ function ticket(node: PRNode): number | null {
   return number === undefined ? null : Number(number);
 }
 
-function assignedPR(node: PRNode): AssignedPR {
+function assignedPR(node: PRNode, viewer: string): AssignedPR {
+  const reviews = submittedReviews(node);
   return {
     repository: node.repository.nameWithOwner,
     number: node.number,
@@ -294,100 +227,17 @@ function assignedPR(node: PRNode): AssignedPR {
     draft: node.isDraft,
     updatedAt: node.updatedAt,
     reviewDecision: node.reviewDecision,
-    reviews: submittedReviews(node),
+    reviews,
     // A request whose reviewer the viewer cannot see has no reviewer.
     pendingReviewers: node.reviewRequests.nodes.flatMap(({ requestedReviewer: reviewer }) => {
       if (reviewer === null) return [];
       return [reviewer.__typename === "Team" ? reviewer.combinedSlug : reviewer.login];
     }),
+    pendingReview:
+      login(node.author) !== viewer &&
+      (isRequested(node, viewer) || !reviews.some((review) => review.author === viewer)),
     ticket: ticket(node),
   };
-}
-
-// An Assigned PR's activity after `since` and not in `known`, by someone
-// other than the viewer and not a bot. Pending and dismissed reviews are no
-// activity.
-function newActivity(node: AssignedNode, viewer: string, since: string, known: ReadonlySet<string>): Activity[] {
-  const pr = { repository: node.repository.nameWithOwner, number: node.number };
-  const isNew = (id: string, author: TypedAuthor, at: string) =>
-    author?.__typename !== "Bot" &&
-    login(author) !== viewer &&
-    !known.has(id) &&
-    Date.parse(at) > Date.parse(since);
-  const reviews = node.reviews.nodes.flatMap((review): Activity[] => {
-    if (review.state === "PENDING" || review.state === "DISMISSED") return [];
-    if (!isNew(review.id, review.author, review.submittedAt)) return [];
-    return [{ ...pr, id: review.id, kind: "review", by: login(review.author), at: review.submittedAt, url: review.url }];
-  });
-  const comments = node.comments.nodes.flatMap((comment): Activity[] => {
-    if (!isNew(comment.id, comment.author, comment.createdAt)) return [];
-    return [{ ...pr, id: comment.id, kind: "comment", by: login(comment.author), at: comment.createdAt, url: comment.url }];
-  });
-  return [...reviews, ...comments];
-}
-
-// The inline comments of reviews, by their ids. Asked only for new reviews
-// that might only hold replies, because asking for every review's inline
-// comments in the check would cost far more of the hourly GraphQL budget.
-const REPLIES_QUERY = `query Replies($ids: [ID!]!) {
-  nodes(ids: $ids) {
-    ... on PullRequestReview {
-      id
-      comments(first: 100) {
-        nodes {
-          url
-          replyTo { id }
-        }
-      }
-    }
-  }
-}`;
-
-// A review GitHub no longer finds, because it was deleted since the check
-// query, is null.
-type RepliesData = {
-  nodes: ({ id: string; comments: { nodes: { url: string; replyTo: { id: string } | null }[] } } | null)[];
-};
-
-function isReviewNotFound(error: GraphQLError): boolean {
-  return error.type === "NOT_FOUND" && error.path?.[0] === "nodes";
-}
-
-// GitHub's most ids in one `nodes` lookup.
-const IDS_PER_QUERY = 100;
-
-// A review that only comments, with no body, might only hold replies.
-function mightOnlyReply(review: AssignedNode["reviews"]["nodes"][number]): boolean {
-  return review.state === "COMMENTED" && review.body === "";
-}
-
-// Makes each review in `activity` that might only hold replies a reply when
-// it has inline comments and all of them reply to existing threads, opening
-// the first one. The rest stay reviews.
-async function withReplies(
-  github: GitHubClient,
-  activity: Activity[],
-  mightBeReplies: ReadonlySet<string>,
-): Promise<Activity[]> {
-  const ids = activity.filter((item) => mightBeReplies.has(item.id)).map((item) => item.id);
-  const firstReply = new Map<string, string>();
-  for (let start = 0; start < ids.length; start += IDS_PER_QUERY) {
-    const data = dataOf<RepliesData>(
-      await github.graphql(REPLIES_QUERY, { ids: ids.slice(start, start + IDS_PER_QUERY) }),
-      isReviewNotFound,
-    );
-    if (data?.nodes === undefined) throw new Error("GitHub GraphQL response has no reviews");
-    for (const review of data.nodes) {
-      const first = review?.comments.nodes[0];
-      if (first !== undefined && review?.comments.nodes.every((comment) => comment.replyTo !== null)) {
-        firstReply.set(review.id, first.url);
-      }
-    }
-  }
-  return activity.map((item) => {
-    const url = firstReply.get(item.id);
-    return url === undefined ? item : { ...item, kind: "reply", url };
-  });
 }
 
 // Whether a review is requested from the viewer directly, not through a team.
@@ -442,92 +292,40 @@ function reviewInboxPR(node: InboxNode, viewer: string): ReviewInboxPR | undefin
   };
 }
 
-function trackedPR(
-  ref: PRRef,
-  lookup: { pullRequest: InboxNode | null } | null | undefined,
-  viewer: string,
-): TrackedPR {
-  if (lookup === undefined) throw new Error("GitHub GraphQL response has no looked up PR");
-  const node = lookup?.pullRequest ?? null;
-  if (node === null) return { ...ref, open: false, viewerReviews: [], pendingRequest: null };
-  return {
-    ...ref,
-    open: node.state === "OPEN",
-    viewerReviews: submittedReviews(node)
-      .filter((review) => review.author === viewer)
-      .map((review) => review.submittedAt),
-    pendingRequest: isRequested(node, viewer)
-      ? { requestedAt: latestRequest(node, viewer)?.createdAt ?? null }
-      : null,
-  };
-}
-
+// What a check saw.
 export type CheckedPRs = {
   assignedPRs: AssignedPR[];
   reviewInbox: ReviewInboxPR[];
 };
 
-// What a check saw: its PRs, what each PR it looked up looks like now, and
-// the new activity on its Assigned PRs.
-export type Checked = CheckedPRs & {
-  tracked: TrackedPR[];
-  activity: Activity[];
-};
-
-export type FetchOptions = {
-  // PRs to look up by their repository and number, in the first query only.
-  lookups?: PRRef[];
-  // Activity counts as new only after `since`, and never without it.
-  since?: string;
-  // Ids of activity already seen, which is never new again.
-  known?: ReadonlySet<string>;
-};
-
-export async function fetchPRs(
-  github: GitHubClient,
-  { lookups = [], since, known = new Set() }: FetchOptions = {},
-): Promise<Checked> {
-  const assigned: AssignedNode[] = [];
+export async function fetchPRs(github: GitHubClient): Promise<CheckedPRs> {
+  const assigned: PRNode[] = [];
   const inbox: InboxNode[] = [];
   const assignedPaging: Paging = { more: true, after: null };
   const inboxPaging: Paging = { more: true, after: null };
   let viewer = "";
-  let tracked: TrackedPR[] | undefined;
   while (assignedPaging.more || inboxPaging.more) {
     const withAssigned = assignedPaging.more;
     const withInbox = inboxPaging.more;
-    const looking = tracked === undefined ? lookups : [];
     const data = decode(
-      await github.graphql(checkQuery(looking.length), {
+      await github.graphql(CHECK_QUERY, {
         first: PAGE_SIZE,
         assigned: withAssigned,
         assignedAfter: assignedPaging.after,
         inbox: withInbox,
         inboxAfter: inboxPaging.after,
-        ...issueVariables(looking),
       }),
     );
     viewer = data.viewer.login;
-    tracked ??= looking.map((ref, i) => trackedPR(ref, data[`tracked${i}`], viewer));
     if (withAssigned) follow(assignedPaging, data.assigned, assigned);
     if (withInbox) follow(inboxPaging, data.inbox, inbox);
   }
   const open = (node: PRNode) => node.state === "OPEN";
-  const openAssigned = assigned.filter(open);
   return {
-    assignedPRs: openAssigned.map(assignedPR),
+    assignedPRs: assigned.filter(open).map((node) => assignedPR(node, viewer)),
     reviewInbox: inbox
       .filter(open)
       .map((node) => reviewInboxPR(node, viewer))
       .filter((pr) => pr !== undefined),
-    tracked: tracked ?? [],
-    activity:
-      since === undefined
-        ? []
-        : await withReplies(
-            github,
-            openAssigned.flatMap((node) => newActivity(node, viewer, since, known)),
-            new Set(openAssigned.flatMap((node) => node.reviews.nodes.filter(mightOnlyReply).map((review) => review.id))),
-          ),
   };
 }
