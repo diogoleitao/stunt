@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs } from "radix-ui";
 import type { ReactNode } from "react";
 import type { RepositoryModel } from "../stunt/page-model.ts";
@@ -9,9 +9,9 @@ import { repositoryTabs } from "./repository-tabs.ts";
 
 // A repository page's tabs, each labelled with its count, showing the panel of
 // the tab the URL selects. Switching tabs replaces the URL with the tab's link
-// in place, so the page is not fetched again and Back leaves the page rather
-// than the tab. Both panels stay mounted, so rows opened in one are still open
-// on coming back to it.
+// in place, so the tab shows at once and Back leaves the page rather than the
+// tab. Both panels stay mounted, so rows opened in one are still open on coming
+// back to it.
 export function RepositoryPageTabs({
   name,
   counts,
@@ -21,11 +21,16 @@ export function RepositoryPageTabs({
   counts: RepositoryModel["counts"];
   panels: Record<RepositoryTab, ReactNode>;
 }) {
+  const router = useRouter();
   const tabs = repositoryTabs({ name, counts, searchParams: useSearchParams() });
 
   function selectTab(tab: string) {
     const row = tabs.find((candidate) => candidate.tab === tab);
-    if (row !== undefined) window.history.replaceState(null, "", row.href);
+    if (row === undefined) return;
+    window.history.replaceState(null, "", row.href);
+    // Next.js turns the replaced URL into a router restore, which discards a
+    // live update's refresh still in flight, so refresh again.
+    router.refresh();
   }
 
   return (
