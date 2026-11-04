@@ -10,6 +10,8 @@ import { type PageModel, pageModel } from "./page-model.ts";
 
 export type Clock = { now(): Date };
 
+export type Schedule = { stop(): void; checkNow(): Promise<void> };
+
 export type StuntOptions = {
   github: GitHubClient;
   dataDir: string;
@@ -53,32 +55,54 @@ export function openStunt({ github, dataDir, configPath, home, clock }: StuntOpt
     // Checks now, then once per check interval, timed from the end of the
     // previous check so two never run at once, telling `onChecked` each
     // stored check's Notifications. A failed check, or a failure of
-    // `onChecked`, is logged and the next check runs on time. Resolves to a
-    // function that stops checking.
-    async start(onChecked: (notifications: Notification[]) => void = () => {}): Promise<() => void> {
+    // `onChecked`, is logged and the next check runs on time. Resolves to the
+    // schedule: `stop` stops checking, and `checkNow` checks at once.
+    async start(onChecked: (notifications: Notification[]) => void = () => {}): Promise<Schedule> {
       const { checkIntervalSeconds } = await readConfig(configPath, home);
       let stopped = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
-      const run = async () => {
-        let notifications: Notification[] | undefined;
-        try {
-          notifications = await check();
-        } catch (error) {
-          console.error("stunt: check failed:", error);
-        }
-        try {
-          if (notifications !== undefined) onChecked(notifications);
-        } catch (error) {
-          console.error("stunt: telling a check's Notifications failed:", error);
-        }
-        if (!stopped) timer = setTimeout(run, checkIntervalSeconds * 1000);
-      };
-      void run();
+      // The check running now, which a check asked for meanwhile joins.
+      let running: Promise<void> | undefined;
 
-      return () => {
-        stopped = true;
-        clearTimeout(timer);
+      // Rejects with the check's error once the next check is scheduled.
+      const run = async () => {
+        try {
+          let notifications: Notification[];
+          try {
+            notifications = await check();
+          } catch (error) {
+            console.error("stunt: check failed:", error);
+            throw error;
+          }
+          try {
+            onChecked(notifications);
+          } catch (error) {
+            console.error("stunt: telling a check's Notifications failed:", error);
+          }
+        } finally {
+          // Done before scheduling, so a check asked for from here on starts
+          // anew instead of joining this one and cancelling the next.
+          running = undefined;
+          if (!stopped) timer = setTimeout(checkOnTime, checkIntervalSeconds * 1000);
+        }
+      };
+      const runOnce = () => (running ??= run());
+
+      // A failed check on time is already logged.
+      const checkOnTime = () => void runOnce().catch(() => {});
+      checkOnTime();
+
+      return {
+        stop() {
+          stopped = true;
+          clearTimeout(timer);
+        },
+        async checkNow() {
+          if (stopped) throw new Error("checking has stopped");
+          if (running === undefined) clearTimeout(timer);
+          await runOnce();
+        },
       };
     },
   };

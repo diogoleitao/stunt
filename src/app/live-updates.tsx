@@ -4,7 +4,7 @@ import { BellRing } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import type { LiveUpdate } from "./app-stunt.ts";
+import { useCheckStream } from "./check-stream.tsx";
 import { repositoryHref } from "./repository-href.ts";
 
 // Whether this browser can show Notifications.
@@ -29,24 +29,19 @@ export function LiveUpdates() {
     if (Notification.permission === "default") ask();
   }, []);
 
-  useEffect(() => {
-    const events = new EventSource("/events");
-    events.onmessage = (event) => {
-      const { sentAt, notifications } = JSON.parse(event.data) as LiveUpdate;
-      router.refresh();
-      if (!supported() || Notification.permission !== "granted") return;
-      for (const { repository, title, body } of notifications) {
-        // Every open tab shows the same Notifications; one tag per check and
-        // repository shows each once.
-        const shown = new Notification(title, { body, tag: `${sentAt} ${repository}` });
-        shown.onclick = () => {
-          window.focus();
-          router.push(repositoryHref(repository));
-        };
-      }
-    };
-    return () => events.close();
-  }, [router]);
+  useCheckStream(({ sentAt, notifications }) => {
+    router.refresh();
+    if (!supported() || Notification.permission !== "granted") return;
+    for (const { repository, title, body } of notifications) {
+      // Every open tab shows the same Notifications; one tag per check and
+      // repository shows each once.
+      const shown = new Notification(title, { body, tag: `${sentAt} ${repository}` });
+      shown.onclick = () => {
+        window.focus();
+        router.push(repositoryHref(repository));
+      };
+    }
+  });
 
   if (permission !== "default") return null;
   return (

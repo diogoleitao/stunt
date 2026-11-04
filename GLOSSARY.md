@@ -49,3 +49,9 @@ _Avoid_: Ungrouped, other, misc
 **Notification**:
 The desktop alert announcing a repository's new Review requests. Each Review request is announced once.
 _Avoid_: Alert, ping
+
+### Checks
+
+**Check**:
+One look at GitHub and the local clones for your Assigned PRs, your Review inbox, each repository's Issue tracker, and the Features its PRs ship. stunt runs one every `checkIntervalSeconds`, timed from the end of the last, and at once when you press "Check now".
+_Avoid_: Sync, refresh, poll

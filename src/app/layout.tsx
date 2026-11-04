@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import type { ReactNode } from "react";
 import { appStunt } from "./app-stunt.ts";
+import { CheckNowButton } from "./check-now-button.tsx";
+import { CheckStream } from "./check-stream.tsx";
 import { LiveUpdates } from "./live-updates.tsx";
 import { RepositoryNav } from "./repository-nav.tsx";
 import { RepositorySwitcher } from "./repository-switcher.tsx";
@@ -22,7 +24,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
             <div className="flex h-14 items-center justify-between border-b border-sidebar-border px-4">
               <span className="font-semibold tracking-tight">stunt</span>
               <div className="flex items-center">
-                <LiveUpdates />
+                <CheckStream>
+                  <CheckNowButton />
+                  <LiveUpdates />
+                </CheckStream>
               </div>
             </div>
             <RepositoryNav owners={model.owners} />

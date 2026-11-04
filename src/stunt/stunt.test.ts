@@ -1806,7 +1806,7 @@ describe("checking on a schedule", () => {
   it("checks at once, then every 60 seconds by default", async () => {
     const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
 
-    const stop = await stunt(github).start();
+    const { stop } = await stunt(github).start();
     await checked(github, 1);
     await vi.advanceTimersByTimeAsync(59_999);
     expect(github.calls).toHaveLength(1);
@@ -1821,7 +1821,7 @@ describe("checking on a schedule", () => {
     await writeConfig({ checkIntervalSeconds: 120 });
     const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
 
-    const stop = await stunt(github).start();
+    const { stop } = await stunt(github).start();
     await checked(github, 1);
     await vi.advanceTimersByTimeAsync(119_999);
     expect(github.calls).toHaveLength(1);
@@ -1837,7 +1837,7 @@ describe("checking on a schedule", () => {
     const app = stunt(github);
     const heard: { titles: string[]; repositories: number }[] = [];
 
-    const stop = await app.start(async (notifications) => {
+    const { stop } = await app.start(async (notifications) => {
       const model = await app.pageModel();
       heard.push({
         titles: notifications.map((notification) => notification.title),
@@ -1861,13 +1861,76 @@ describe("checking on a schedule", () => {
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const github = fakeGitHub([]);
 
-    const stop = await stunt(github).start();
+    const { stop } = await stunt(github).start();
     await checked(github, 1);
     await vi.advanceTimersByTimeAsync(60_000);
     await checked(github, 2);
 
     expect(logged).toHaveBeenCalledWith("stunt: check failed:", expect.any(Error));
     stop();
+  });
+
+  it("checks now when asked to, without waiting for the interval", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
+
+    const { stop, checkNow } = await stunt(github).start();
+    await checked(github, 1);
+    await checkNow();
+
+    expect(github.calls).toHaveLength(2);
+    stop();
+  });
+
+  it("checks next one interval after checking now", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull), checkResponse(assignedFull)]);
+
+    const { stop, checkNow } = await stunt(github).start();
+    await checked(github, 1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await checkNow();
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(github.calls).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(1);
+    await checked(github, 3);
+
+    stop();
+  });
+
+  it("joins the check running when asked to check now", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
+    const heard: number[] = [];
+
+    const { stop, checkNow } = await stunt(github).start(() => heard.push(github.calls.length));
+    await checkNow();
+
+    expect(github.calls).toHaveLength(1);
+    expect(heard).toEqual([1]);
+    expect(vi.getTimerCount()).toBe(1);
+    stop();
+  });
+
+  it("fails to check now when the check fails, and keeps checking", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const github = fakeGitHub([checkResponse(assignedFull)]);
+
+    const { stop, checkNow } = await stunt(github).start();
+    await checked(github, 1);
+
+    await expect(checkNow()).rejects.toThrow("no recorded response left");
+    expect(vi.getTimerCount()).toBe(1);
+    stop();
+  });
+
+  it("refuses to check now once stopped", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
+
+    const { stop, checkNow } = await stunt(github).start();
+    await checked(github, 1);
+    stop();
+
+    await expect(checkNow()).rejects.toThrow("checking has stopped");
+    expect(github.calls).toHaveLength(1);
   });
 
   it.each([[0], [1.5], ["60"]])(
