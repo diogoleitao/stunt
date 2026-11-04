@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs } from "radix-ui";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { RepositoryModel } from "../stunt/page-model.ts";
 import type { RepositoryTab } from "./repository-href.ts";
 import { repositoryTabs } from "./repository-tabs.ts";
@@ -23,19 +23,29 @@ export function RepositoryPageTabs({
 }) {
   const router = useRouter();
   const tabs = repositoryTabs({ name, counts, searchParams: useSearchParams() });
+  const selected = tabs.find((row) => row.selected)?.tab;
+  const switched = useRef(false);
+
+  // Next.js turns the replaced URL into a router restore, which discards a live
+  // update's refresh still in flight, so refresh again once the switch is on
+  // screen. Refreshing in the same event as the switch would hold the new tab
+  // back until the refresh returns.
+  useEffect(() => {
+    if (!switched.current) return;
+    switched.current = false;
+    router.refresh();
+  }, [selected, router]);
 
   function selectTab(tab: string) {
     const row = tabs.find((candidate) => candidate.tab === tab);
     if (row === undefined) return;
+    switched.current = true;
     window.history.replaceState(null, "", row.href);
-    // Next.js turns the replaced URL into a router restore, which discards a
-    // live update's refresh still in flight, so refresh again.
-    router.refresh();
   }
 
   return (
     <Tabs.Root
-      value={tabs.find((row) => row.selected)?.tab}
+      value={selected}
       onValueChange={selectTab}
       className="flex flex-col gap-4"
     >
