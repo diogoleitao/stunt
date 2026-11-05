@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { AssignedPRTable } from "../../../assigned-pr-table.tsx";
 import { appStunt } from "../../../app-stunt.ts";
+import { RepositoryPageTabs } from "../../../repository-page-tabs.tsx";
 import { ReviewInboxTable } from "../../../review-inbox-table.tsx";
 
 export default async function RepositoryPage({
@@ -22,22 +23,24 @@ export default async function RepositoryPage({
           {name}
         </a>
       </h1>
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Assigned PRs</h2>
-        {repository === undefined || repository.assignedPRs.length === 0 ? (
-          <p className="text-muted-foreground">No Assigned PRs in {name}.</p>
-        ) : (
-          <AssignedPRTable groups={repository.assignedPRs} />
-        )}
-      </section>
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Review inbox</h2>
-        {repository === undefined || repository.reviewInbox.length === 0 ? (
-          <p className="text-muted-foreground">Your Review inbox in {name} is empty.</p>
-        ) : (
-          <ReviewInboxTable groups={repository.reviewInbox} />
-        )}
-      </section>
+      <RepositoryPageTabs
+        name={name}
+        counts={repository?.counts ?? { assignedPRs: 0, reviewInbox: 0 }}
+        panels={{
+          "assigned-prs":
+            repository === undefined || repository.assignedPRs.length === 0 ? (
+              <p className="text-muted-foreground">No Assigned PRs in {name}.</p>
+            ) : (
+              <AssignedPRTable groups={repository.assignedPRs} />
+            ),
+          "review-inbox":
+            repository === undefined || repository.reviewInbox.length === 0 ? (
+              <p className="text-muted-foreground">Your Review inbox in {name} is empty.</p>
+            ) : (
+              <ReviewInboxTable groups={repository.reviewInbox} />
+            ),
+        }}
+      />
     </div>
   );
 }
