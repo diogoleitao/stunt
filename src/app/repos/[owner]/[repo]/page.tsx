@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { AssignedPRTable } from "../../../assigned-pr-table.tsx";
 import { appStunt } from "../../../app-stunt.ts";
+import { CheckNowButton } from "../../../check-now-button.tsx";
 import { RepositoryPageTabs } from "../../../repository-page-tabs.tsx";
 import { ReviewInboxTable } from "../../../review-inbox-table.tsx";
 
@@ -18,11 +19,14 @@ export default async function RepositoryPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold tracking-tight">
-        <a href={`https://github.com/${name}`} target="_blank" rel="noreferrer" className="hover:underline">
-          {name}
-        </a>
-      </h1>
+      <div className="flex items-center gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          <a href={`https://github.com/${name}`} target="_blank" rel="noreferrer" className="hover:underline">
+            {name}
+          </a>
+        </h1>
+        <CheckNowButton repository={name} />
+      </div>
       <RepositoryPageTabs
         name={name}
         counts={repository?.counts ?? { assignedPRs: 0, reviewInbox: 0 }}

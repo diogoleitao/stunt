@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { switcherRows } from "./switcher-rows.ts";
+import { commandRows, switcherRows } from "./switcher-rows.ts";
 
 const NAMES = ["owner-2/stunt", "owner-1/web", "stunt-org/api", "owner-1/stunt-cli"];
 
@@ -19,6 +19,11 @@ describe("the switcher's rows", () => {
 
   it("lists nothing when no repository matches", () => {
     expect(namesOf("nope")).toEqual([]);
+  });
+
+  it("lists no repository for a query starting with :, which lists commands instead", () => {
+    expect(switcherRows({ names: ["owner/repo:check"], query: ":check" })).toEqual([]);
+    expect(switcherRows({ names: ["owner/repo:check"], query: " :" })).toEqual([]);
   });
 
   it("gives rows one to nine the shortcuts 1 to 9, the tenth 0, and the rest none", () => {
@@ -57,5 +62,26 @@ describe("the switcher's rows", () => {
 
   it("marks no repository off a repository page", () => {
     expect(switcherRows({ names: NAMES, query: "" }).map((row) => row.current)).toEqual([false, false, false, false]);
+  });
+});
+
+describe("the switcher's commands", () => {
+  it.each([[":"], [":c"], [":check"], ["  :CH "]])("list :check for %j", (query) => {
+    expect(commandRows({ query })).toEqual([{ command: ":check", description: ["Check now"] }]);
+  });
+
+  it("list nothing for a command query no command matches", () => {
+    expect(commandRows({ query: ":x" })).toEqual([]);
+  });
+
+  it("are not listed for a query that does not start with :", () => {
+    expect(commandRows({ query: "check" })).toBeUndefined();
+    expect(commandRows({ query: "" })).toBeUndefined();
+  });
+
+  it("check the repository whose page is open, naming it as code", () => {
+    expect(commandRows({ query: ":check", current: "owner-1/web" })).toEqual([
+      { command: ":check", description: ["Check ", { code: "owner-1/web" }, " now"] },
+    ]);
   });
 });

@@ -55,3 +55,11 @@ export async function checkNow(): Promise<void> {
   if (running.stuntSchedule === undefined) throw new Error("checking has not started");
   await running.stuntSchedule.checkNow();
 }
+
+// Makes a Repository check of `repository`, as `owner/repo`, joining the
+// check running if there is one, and leaving the next check on time. Rejects
+// with the check's error, or when the server's checks have not started.
+export async function checkRepositoryNow(repository: string): Promise<void> {
+  if (running.stuntSchedule === undefined) throw new Error("checking has not started");
+  await running.stuntSchedule.checkRepository(repository);
+}

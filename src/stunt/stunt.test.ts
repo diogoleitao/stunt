@@ -499,8 +499,10 @@ describe("a check", () => {
     await stunt(github).check();
 
     expect(github.calls).toHaveLength(1);
-    expect(github.calls[0].query).toContain("assignee:@me");
-    expect(github.calls[0].query).toContain("user-review-requested:@me");
+    expect(github.calls[0].variables).toMatchObject({
+      assignedSearch: "is:pr is:open assignee:@me",
+      inboxSearch: "is:pr is:open user-review-requested:@me",
+    });
   });
 
   it("follows the next page of Assigned PRs alone when that page overflows", async () => {
@@ -584,6 +586,110 @@ describe("a check", () => {
     await expect(app.check()).rejects.toThrow("no recorded response left");
 
     expect(await app.pageModel()).toEqual(ALL_ASSIGNED);
+  });
+});
+
+// A check's response holding only the Assigned PRs and Review inbox PRs of
+// `repository`, as GitHub answers a Repository check of it.
+function inRepository(response: { data: Record<string, unknown> }, repository: string) {
+  const restricted = structuredClone(response);
+  for (const key of ["assigned", "inbox"]) {
+    const page = restricted.data[key] as { nodes: { repository: { nameWithOwner: string } }[] } | undefined;
+    if (page !== undefined) page.nodes = page.nodes.filter((node) => node.repository.nameWithOwner === repository);
+  }
+  return restricted;
+}
+
+describe("a Repository check", () => {
+  it("asks GitHub only for the Assigned PRs and the Review inbox of its repository", async () => {
+    const github = fakeGitHub([inRepository(checkResponse(assignedFull, inboxFull), "owner-1/repo-2")]);
+
+    await stunt(github).checkRepository("owner-1/repo-2");
+
+    expect(github.calls).toHaveLength(1);
+    expect(github.calls[0].variables).toMatchObject({
+      assignedSearch: "is:pr is:open assignee:@me repo:owner-1/repo-2",
+      inboxSearch: "is:pr is:open user-review-requested:@me repo:owner-1/repo-2",
+    });
+  });
+
+  it("replaces what the last check saw of its repository, leaving every other repository and the check time as they were", async () => {
+    // Since the check, Assigned PR #10412 was closed and the Review request on
+    // #10419 withdrawn, both in owner-1/repo-2.
+    const later = checkResponse(withoutPRs(10412), withInboxPR(10419, withoutMyRequest));
+    await stunt(fakeGitHub([checkResponse(assignedFull, inboxFull)])).check();
+
+    await stunt(fakeGitHub([inRepository(later, "owner-1/repo-2")]), LATER).checkRepository("owner-1/repo-2");
+
+    expect(await stunt(fakeGitHub([])).pageModel()).toEqual(await modelOf(later));
+  });
+
+  it("announces its repository's new Review requests, which the next check does not announce again", async () => {
+    const later = checkResponse(NO_ASSIGNED, inboxHolding(368, 10419, 365));
+    const app = stunt(
+      fakeGitHub([checkResponse(NO_ASSIGNED, inboxHolding(368)), inRepository(later, "owner-1/repo-2"), later, later]),
+    );
+    await app.check();
+
+    const repositoryChecked = await app.checkRepository("owner-1/repo-2");
+    const checked = await app.check();
+
+    expect(repositoryChecked).toEqual([
+      { repository: "owner-1/repo-2", title: "owner-1/repo-2: 1 new Review request", body: "#10419 by user-5" },
+    ]);
+    expect(checked.map((notification) => notification.title)).toEqual(["owner-1/repo-5: 1 new Review request"]);
+    expect(await app.check()).toEqual([]);
+  });
+
+  it("reads the Issue tracker of its repository alone", async () => {
+    await stunt(fakeGitHub([checkResponse(assignedFull)])).check();
+    // Since the check, owner-1/repo-1 and owner-1/repo-2 declared GitHub.
+    const github = fakeGitHub([inRepository(checkResponse(assignedFull), "owner-1/repo-1")], {
+      "owner-1/repo-1": DECLARED,
+      "owner-1/repo-2": DECLARED,
+    });
+
+    await stunt(github).checkRepository("owner-1/repo-1");
+
+    expect(github.declarationCalls).toHaveLength(1);
+    expect(github.declarationCalls[0].variables).not.toHaveProperty("owner1");
+    expect(github.declarationCalls[0].variables).toMatchObject({ owner0: "owner-1", name0: "repo-1" });
+    expect(await stunt(fakeGitHub([])).pageModel()).toEqual({
+      ...ALL_ASSIGNED,
+      repositories: ALL_ASSIGNED.repositories.map((repository) =>
+        repository.name === "owner-1/repo-1" ? { ...repository, issueTracker: "GitHub" } : repository,
+      ),
+    });
+  });
+
+  it("drops its repository from the sidebar when it has no open PR left", async () => {
+    await stunt(fakeGitHub([checkResponse(assignedFull)])).check();
+
+    await stunt(fakeGitHub([inRepository(checkResponse(withoutPRs(136)), "owner-1/repo-1")])).checkRepository(
+      "owner-1/repo-1",
+    );
+
+    expect(await stunt(fakeGitHub([])).pageModel()).toEqual(await modelOf(checkResponse(withoutPRs(136))));
+  });
+
+  it.each([["owner-1"], ["owner-1/repo-2 assignee:user-2"], ["owner-1/repo-2/pull"], [""]])(
+    "refuses %j, which is not owner/repo, without asking GitHub",
+    async (repository) => {
+      const github = fakeGitHub([checkResponse(assignedFull)]);
+
+      await expect(stunt(github).checkRepository(repository)).rejects.toThrow(
+        `not a repository name: ${JSON.stringify(repository)}`,
+      );
+      expect(github.calls).toEqual([]);
+    },
+  );
+
+  it("keeps what the last check saw when it fails", async () => {
+    await stunt(fakeGitHub([checkResponse(assignedFull)])).check();
+
+    await expect(stunt(fakeGitHub([])).checkRepository("owner-1/repo-2")).rejects.toThrow("no recorded response left");
+
+    expect(await stunt(fakeGitHub([])).pageModel()).toEqual(ALL_ASSIGNED);
   });
 });
 
@@ -1930,6 +2036,178 @@ describe("checking on a schedule", () => {
     stop();
 
     await expect(checkNow()).rejects.toThrow("checking has stopped");
+    expect(github.calls).toHaveLength(1);
+  });
+
+  // The search a check query of `call` makes for Assigned PRs, telling a
+  // Repository check's query from a check's.
+  function searchOf(call: GraphQLCall) {
+    return call.variables.assignedSearch;
+  }
+
+  it("checks a repository when asked to, telling the listener, and checks next on time", async () => {
+    const later = checkResponse(NO_ASSIGNED, inboxHolding(368, 10419));
+    const github = fakeGitHub([checkResponse(NO_ASSIGNED, inboxHolding(368)), inRepository(later, "owner-1/repo-2"), later]);
+    const heard: string[][] = [];
+
+    const { stop, checkRepository } = await stunt(github).start((notifications) =>
+      heard.push(notifications.map((notification) => notification.title)),
+    );
+    await checked(github, 1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    await checkRepository("owner-1/repo-2");
+
+    expect(heard).toEqual([["owner-1/repo-3: 1 new Review request"], ["owner-1/repo-2: 1 new Review request"]]);
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(github.calls.map(searchOf)).toEqual([
+      "is:pr is:open assignee:@me",
+      "is:pr is:open assignee:@me repo:owner-1/repo-2",
+    ]);
+    await vi.advanceTimersByTimeAsync(1);
+    await checked(github, 3);
+
+    stop();
+  });
+
+  it("joins the check running when asked to check a repository", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
+    const heard: number[] = [];
+
+    const { stop, checkRepository } = await stunt(github).start(() => heard.push(github.calls.length));
+    await checkRepository("owner-1/repo-2");
+
+    expect(github.calls).toHaveLength(1);
+    expect(heard).toEqual([1]);
+    stop();
+  });
+
+  it("joins the check of a repository running when asked to check it again", async () => {
+    const response = inRepository(checkResponse(assignedFull), "owner-1/repo-2");
+    const github = fakeGitHub([checkResponse(assignedFull), response, response]);
+    const heard: number[] = [];
+
+    const { stop, checkRepository } = await stunt(github).start(() => heard.push(github.calls.length));
+    await checked(github, 1);
+    await Promise.all([checkRepository("owner-1/repo-2"), checkRepository("Owner-1/Repo-2")]);
+
+    expect(github.calls).toHaveLength(2);
+    expect(heard).toEqual([1, 2]);
+    stop();
+  });
+
+  // `github`, holding its answers to check queries from when `hold` is called
+  // until the release it returns is, so the checks asking stay running.
+  function holdable(github: GitHubClient) {
+    let gate = Promise.resolve();
+    const client: GitHubClient = {
+      async graphql(query, variables) {
+        const answer = github.graphql(query, variables);
+        if (query.startsWith("query Check")) await gate;
+        return answer;
+      },
+    };
+    function hold() {
+      let release = () => {};
+      gate = new Promise((resolve) => (release = resolve));
+      return release;
+    }
+    return { client, hold };
+  }
+
+  // Lets real file system work run for a while.
+  async function settle() {
+    for (let turn = 0; turn < 100; turn++) await new Promise((resolve) => setImmediate(resolve));
+  }
+
+  // The check response `response`, restricted to the repository a
+  // Repository check query asks about.
+  function answering(response: { data: Record<string, unknown> }) {
+    return (variables: Record<string, unknown>) =>
+      inRepository(response, String(variables.assignedSearch).split("repo:")[1]);
+  }
+
+  const ALL = "is:pr is:open assignee:@me";
+  const REPO_1 = "is:pr is:open assignee:@me repo:owner-1/repo-1";
+  const REPO_2 = "is:pr is:open assignee:@me repo:owner-1/repo-2";
+
+  it("checks two repositories at once", async () => {
+    const response = checkResponse(assignedFull);
+    const github = fakeGitHub([response, answering(response), answering(response)]);
+    const { client, hold } = holdable(github);
+
+    const { stop, checkRepository } = await stunt(client).start();
+    await checked(github, 1);
+    const release = hold();
+    const both = Promise.all([checkRepository("owner-1/repo-1"), checkRepository("owner-1/repo-2")]);
+    await until(() => github.calls.length === 3);
+    release();
+    await both;
+
+    expect(github.calls.slice(1).map(searchOf).toSorted()).toEqual([REPO_1, REPO_2]);
+    stop();
+  });
+
+  it("checks once the checks of repositories running are done", async () => {
+    const response = checkResponse(assignedFull);
+    const github = fakeGitHub([response, answering(response), response]);
+    const { client, hold } = holdable(github);
+
+    const { stop, checkNow, checkRepository } = await stunt(client).start();
+    await checked(github, 1);
+    const release = hold();
+    const repositoryChecked = checkRepository("owner-1/repo-1");
+    await until(() => github.calls.length === 2);
+    const checkedNow = checkNow();
+    await settle();
+    expect(github.calls).toHaveLength(2);
+    release();
+    await Promise.all([repositoryChecked, checkedNow]);
+
+    expect(github.calls.map(searchOf)).toEqual([ALL, REPO_1, ALL]);
+    stop();
+  });
+
+  it("joins the check waiting for the checks of repositories when asked to check another repository", async () => {
+    const response = checkResponse(assignedFull);
+    const github = fakeGitHub([response, answering(response), response, answering(response)]);
+    const { client, hold } = holdable(github);
+
+    const { stop, checkNow, checkRepository } = await stunt(client).start();
+    await checked(github, 1);
+    const release = hold();
+    const repositoryChecked = checkRepository("owner-1/repo-1");
+    await until(() => github.calls.length === 2);
+    const checkedNow = checkNow();
+    const otherChecked = checkRepository("owner-1/repo-2");
+    release();
+    await Promise.all([repositoryChecked, checkedNow, otherChecked]);
+
+    expect(github.calls.map(searchOf)).toEqual([ALL, REPO_1, ALL]);
+    stop();
+  });
+
+  it("fails to check a repository when its check fails, logging it, and keeps checking on time", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const github = fakeGitHub([checkResponse(assignedFull)]);
+
+    const { stop, checkRepository } = await stunt(github).start();
+    await checked(github, 1);
+
+    await expect(checkRepository("owner-1/repo-2")).rejects.toThrow("no recorded response left");
+    expect(logged).toHaveBeenCalledWith("stunt: Repository check of owner-1/repo-2 failed:", expect.any(Error));
+    expect(vi.getTimerCount()).toBe(1);
+    stop();
+  });
+
+  it("refuses to check a repository once stopped", async () => {
+    const github = fakeGitHub([checkResponse(assignedFull), checkResponse(assignedFull)]);
+
+    const { stop, checkRepository } = await stunt(github).start();
+    await checked(github, 1);
+    stop();
+
+    await expect(checkRepository("owner-1/repo-2")).rejects.toThrow("checking has stopped");
     expect(github.calls).toHaveLength(1);
   });
 

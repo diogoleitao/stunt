@@ -53,5 +53,9 @@ _Avoid_: Alert, ping
 ### Checks
 
 **Check**:
-One look at GitHub and the local clones for your Assigned PRs, your Review inbox, each repository's Issue tracker, and the Features its PRs ship. stunt runs one every `checkIntervalSeconds`, timed from the end of the last, and at once when you press "Check now".
-_Avoid_: Sync, refresh, poll
+One look at GitHub and the local clones for your Assigned PRs, your Review inbox, each repository's Issue tracker, and the Features its PRs ship, across every repository. stunt runs one every `checkIntervalSeconds`, timed from the end of the last, and at once when you ask for one.
+_Avoid_: Sync, refresh, poll, full check
+
+**Repository check**:
+A Check of a single repository, run when you ask for it from that repository's page. It leaves every other repository as the last Check saw it.
+_Avoid_: Repo sync, sync per repo, partial check
