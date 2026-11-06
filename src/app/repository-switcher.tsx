@@ -1,12 +1,13 @@
 "use client";
 
 import { Search } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import { Dialog } from "radix-ui";
-import { type KeyboardEvent, useEffect, useEffectEvent, useId, useState } from "react";
+import { type KeyboardEvent, type ReactNode, useEffect, useEffectEvent, useId, useState } from "react";
 import { cn } from "@/lib/utils";
+import { useCheck } from "./checks.tsx";
 import { repositoryHref } from "./repository-href.ts";
-import { switcherRows } from "./switcher-rows.ts";
+import { type CommandRow, commandRows, switcherRows } from "./switcher-rows.ts";
 
 // The Cmd+K switcher over every repository, by full name. Escape closes it.
 export function RepositorySwitcher({ names }: { names: string[] }) {
@@ -57,14 +58,41 @@ const SHORTCUT_CODES: Record<string, string> = {
   Digit0: "0",
 };
 
+// A row of the switcher: a repository, or a command with what it does below
+// its name.
+type Option = {
+  key: string;
+  label: string;
+  description?: ReactNode;
+  current: boolean;
+  shortcut?: string;
+  pick(): void;
+};
+
+// A command's description, its names shown as code.
+function describe(parts: CommandRow["description"]): ReactNode {
+  return parts.map((part, index) =>
+    typeof part === "string" ? (
+      part
+    ) : (
+      <code key={index} className="rounded bg-muted-foreground/70 px-1 py-0.5 font-mono text-xs text-background">
+        {part.code}
+      </code>
+    ),
+  );
+}
+
 // Filters the repositories by owner/repo as you type, moves the selection with
 // the arrow keys, and opens the selected repository's page on Enter, or a
 // row's page on Cmd and its digit. Holding Cmd on its own shows each row's
-// digit. Mounted only while the switcher is open, so every opening starts from
-// an empty query, and Cmd and its digits are only taken while it is open.
+// digit. A query starting with ":" lists commands instead, which Enter runs
+// once the switcher has closed. Mounted only while the switcher is open, so
+// every opening starts from an empty query, and Cmd and its digits are only
+// taken while it is open.
 function RepositoryPicker({ names, onPick }: { names: string[]; onPick: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
+  const params = useParams<{ owner?: string; repo?: string }>();
   const listId = useId();
   const [query, setQuery] = useState("");
   // Held by name so a live refresh that reorders the repositories keeps the
@@ -72,9 +100,32 @@ function RepositoryPicker({ names, onPick }: { names: string[]; onPick: () => vo
   const [selectedName, setSelectedName] = useState<string>();
   const [hintShown, setHintShown] = useState(false);
 
+  // The repository whose page is open, though stunt saw no PR of it.
+  const pageRepository =
+    params.owner === undefined || params.repo === undefined ? undefined : `${params.owner}/${params.repo}`;
+  const { check } = useCheck(pageRepository);
+  const commands = commandRows({ query, current: pageRepository });
   const current = names.find((name) => pathname === repositoryHref(name));
   const rows = switcherRows({ names, query, current });
-  const selectedIndex = Math.max(0, rows.findIndex((row) => row.name === selectedName));
+  const options: Option[] =
+    commands?.map((command) => ({
+      key: command.command,
+      label: command.command,
+      description: describe(command.description),
+      current: false,
+      pick: () => {
+        onPick();
+        check();
+      },
+    })) ??
+    rows.map((row) => ({
+      key: row.name,
+      label: row.name,
+      current: row.current,
+      shortcut: row.shortcut,
+      pick: () => openRepository(row.name),
+    }));
+  const selectedIndex = Math.max(0, options.findIndex((option) => option.key === selectedName));
 
   function openRepository(name: string) {
     onPick();
@@ -122,16 +173,16 @@ function RepositoryPicker({ names, onPick }: { names: string[]; onPick: () => vo
   }, []);
 
   function navigateRows(event: KeyboardEvent<HTMLInputElement>) {
-    if (rows.length === 0 || event.nativeEvent.isComposing) return;
+    if (options.length === 0 || event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setSelectedName(rows[(selectedIndex + 1) % rows.length].name);
+      setSelectedName(options[(selectedIndex + 1) % options.length].key);
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setSelectedName(rows[(selectedIndex - 1 + rows.length) % rows.length].name);
+      setSelectedName(options[(selectedIndex - 1 + options.length) % options.length].key);
     } else if (event.key === "Enter") {
       event.preventDefault();
-      openRepository(rows[selectedIndex].name);
+      options[selectedIndex].pick();
     }
   }
 
@@ -145,7 +196,7 @@ function RepositoryPicker({ names, onPick }: { names: string[]; onPick: () => vo
           role="combobox"
           aria-expanded
           aria-controls={listId}
-          aria-activedescendant={rows.length > 0 ? optionId(selectedIndex) : undefined}
+          aria-activedescendant={options.length > 0 ? optionId(selectedIndex) : undefined}
           aria-label="Repository"
           placeholder="owner/repo"
           value={query}
@@ -157,33 +208,47 @@ function RepositoryPicker({ names, onPick }: { names: string[]; onPick: () => vo
           className="h-11 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
         />
       </div>
-      <ul id={listId} role="listbox" aria-label="Repositories" className="max-h-80 overflow-y-auto p-1">
-        {rows.map((row, index) => (
+      <ul
+        id={listId}
+        role="listbox"
+        aria-label={commands === undefined ? "Repositories" : "Commands"}
+        className="max-h-80 overflow-y-auto p-1"
+      >
+        {options.map((option, index) => (
           <li
-            key={row.name}
+            key={option.key}
             id={optionId(index)}
             role="option"
             aria-selected={index === selectedIndex}
-            aria-keyshortcuts={row.shortcut === undefined ? undefined : `Meta+${row.shortcut}`}
-            ref={index === selectedIndex ? (option) => option?.scrollIntoView({ block: "nearest" }) : undefined}
-            onMouseMove={() => setSelectedName(row.name)}
-            onClick={() => openRepository(row.name)}
+            aria-keyshortcuts={option.shortcut === undefined ? undefined : `Meta+${option.shortcut}`}
+            ref={index === selectedIndex ? (element) => element?.scrollIntoView({ block: "nearest" }) : undefined}
+            onMouseMove={() => setSelectedName(option.key)}
+            onClick={option.pick}
             className={cn(
               "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm",
               index === selectedIndex && "bg-accent text-accent-foreground",
             )}
           >
-            <span className="truncate">{row.name}</span>
-            {row.current && <span className="shrink-0 text-muted-foreground">(current)</span>}
-            {hintShown && row.shortcut !== undefined && (
+            {option.description === undefined ? (
+              <span className="truncate">{option.label}</span>
+            ) : (
+              <span className="flex min-w-0 flex-col">
+                <span className="font-semibold">{option.label}</span>
+                <span className="truncate text-muted-foreground">{option.description}</span>
+              </span>
+            )}
+            {option.current && <span className="shrink-0 text-muted-foreground">(current)</span>}
+            {hintShown && option.shortcut !== undefined && (
               <kbd className="ml-auto shrink-0 rounded border bg-muted px-1.5 font-sans text-xs text-muted-foreground">
-                ⌘{row.shortcut}
+                ⌘{option.shortcut}
               </kbd>
             )}
           </li>
         ))}
-        {rows.length === 0 && (
-          <li className="px-2 py-6 text-center text-sm text-muted-foreground">No repositories found.</li>
+        {options.length === 0 && (
+          <li className="px-2 py-6 text-center text-sm text-muted-foreground">
+            {commands === undefined ? "No repositories found." : "No commands found."}
+          </li>
         )}
       </ul>
     </>

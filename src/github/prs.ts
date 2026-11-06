@@ -61,20 +61,25 @@ const PAGE_SIZE = 100;
 // A PR by its repository and number.
 export type PRRef = { repository: string; number: number };
 
-// One check: the viewer, every open PR listing the viewer as an assignee,
-// drafts included, whoever authored it, and every open PR with a Review
-// request for the viewer. The search index lags behind merges, closes, and
-// withdrawn requests, so each PR's own state and pending requests are fetched
-// too. A page that overflows is followed by querying only its own search.
-const CHECK_QUERY = `query Check($first: Int!, $assigned: Boolean!, $assignedAfter: String, $inbox: Boolean!, $inboxAfter: String) {
+// The searches of one check: every open PR listing the viewer as an
+// assignee, drafts included, whoever authored it, and every open PR with a
+// Review request for the viewer.
+const ASSIGNED_SEARCH = "is:pr is:open assignee:@me";
+const INBOX_SEARCH = "is:pr is:open user-review-requested:@me";
+
+// One check: the viewer and both searches. The search index lags behind
+// merges, closes, and withdrawn requests, so each PR's own state and pending
+// requests are fetched too. A page that overflows is followed by querying
+// only its own search.
+const CHECK_QUERY = `query Check($first: Int!, $assigned: Boolean!, $assignedSearch: String!, $assignedAfter: String, $inbox: Boolean!, $inboxSearch: String!, $inboxAfter: String) {
   viewer { login }
-  assigned: search(query: "is:pr is:open assignee:@me", type: ISSUE, first: $first, after: $assignedAfter) @include(if: $assigned) {
+  assigned: search(query: $assignedSearch, type: ISSUE, first: $first, after: $assignedAfter) @include(if: $assigned) {
     pageInfo { hasNextPage endCursor }
     nodes {
       ... on PullRequest { ...PR }
     }
   }
-  inbox: search(query: "is:pr is:open user-review-requested:@me", type: ISSUE, first: $first, after: $inboxAfter) @include(if: $inbox) {
+  inbox: search(query: $inboxSearch, type: ISSUE, first: $first, after: $inboxAfter) @include(if: $inbox) {
     pageInfo { hasNextPage endCursor }
     nodes {
       ... on PullRequest { ...InboxPR }
@@ -298,7 +303,21 @@ export type CheckedPRs = {
   reviewInbox: ReviewInboxPR[];
 };
 
-export async function fetchPRs(github: GitHubClient): Promise<CheckedPRs> {
+// A repository's `owner/repo`, as GitHub allows its names.
+const REPOSITORY_NAME = /^[\w.-]+\/[\w.-]+$/;
+
+// Whether `name` is an `owner/repo`, so a search can be narrowed to it
+// without adding any other qualifier.
+export function isRepositoryName(name: string): boolean {
+  return REPOSITORY_NAME.test(name);
+}
+
+// What a check sees, of `repository` alone when given.
+export async function fetchPRs(github: GitHubClient, repository?: string): Promise<CheckedPRs> {
+  if (repository !== undefined && !isRepositoryName(repository)) {
+    throw new Error(`not a repository name: ${JSON.stringify(repository)}`);
+  }
+  const within = repository === undefined ? "" : ` repo:${repository}`;
   const assigned: PRNode[] = [];
   const inbox: InboxNode[] = [];
   const assignedPaging: Paging = { more: true, after: null };
@@ -311,8 +330,10 @@ export async function fetchPRs(github: GitHubClient): Promise<CheckedPRs> {
       await github.graphql(CHECK_QUERY, {
         first: PAGE_SIZE,
         assigned: withAssigned,
+        assignedSearch: ASSIGNED_SEARCH + within,
         assignedAfter: assignedPaging.after,
         inbox: withInbox,
+        inboxSearch: INBOX_SEARCH + within,
         inboxAfter: inboxPaging.after,
       }),
     );
