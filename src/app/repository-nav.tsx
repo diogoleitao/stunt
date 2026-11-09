@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import type { OwnerRow, RepositoryModel } from "../stunt/page-model.ts";
+import { PulsingCount } from "./pulsing-count.tsx";
 import { repositoryHref } from "./repository-href.ts";
 
 const DASHBOARD_HREF = "/";
@@ -104,11 +105,12 @@ function NavLink({
   );
 }
 
+// Dimmed at zero, the icon at once and the number once its pulse ends.
 function Count({ title, icon, value }: { title: string; icon: ReactNode; value: number }) {
   return (
-    <span title={title} className={cn("flex items-center gap-0.5 [&_svg]:size-3", value === 0 && "opacity-50")}>
+    <span title={title} className={cn("flex items-center gap-0.5 [&_svg]:size-3", value === 0 && "[&>svg]:opacity-50")}>
       {icon}
-      {value}
+      <PulsingCount value={value} className={cn(value === 0 && "opacity-50")} />
       <span className="sr-only">{title}</span>
     </span>
   );

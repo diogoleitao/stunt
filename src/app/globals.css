@@ -34,6 +34,24 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --animate-count-pulse: count-pulse 2s ease-in-out;
+
+  /* The pulse colour, semibold at full opacity for the first second, growing
+     and settling back within it, then back over the next to the count's own
+     colour, weight and opacity, so a count dimmed at zero dims once the pulse
+     ends. */
+  @keyframes count-pulse {
+    0%,
+    50% {
+      color: var(--count-pulse);
+      opacity: 1;
+      font-weight: 600;
+      transform: scale(1);
+    }
+    15% {
+      transform: scale(1.25);
+    }
+  }
 }
 
 :root {
@@ -65,6 +83,7 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --count-pulse: var(--color-amber-700);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -95,6 +114,7 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+    --count-pulse: var(--color-amber-400);
   }
 }
 
