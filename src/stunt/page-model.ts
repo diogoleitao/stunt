@@ -20,6 +20,8 @@ export type AssignedPRRow = {
   // before, and a dismissed verdict stands for no one.
   reviewers: ReviewerRow[];
   updatedAgo: string;
+  // When it was last updated, which the Updated column sorts by.
+  updatedAt: string;
   // Each reviewer's latest review, most recent first.
   reviews: ReviewRow[];
   // Who a review is still requested from: user logins and team slugs.
@@ -61,9 +63,10 @@ export type ReviewInboxRow = {
   title: string;
   url: string;
   author: string;
-  // Who requested the viewer's review, and how long it has waited. Null when
-  // the request is too old for the check to have read.
-  request: { by: string; ago: string } | null;
+  // Who requested the viewer's review, how long it has waited, and since
+  // when, which the Requested column sorts by. Null when the request is too
+  // old for the check to have read.
+  request: { by: string; ago: string; waitingSince: string } | null;
   // The viewer had already reviewed the PR before this request.
   reRequest: boolean;
 };
@@ -75,9 +78,9 @@ export type RepositoryModel = {
   issueTracker: IssueTracker | null;
   // How many Assigned PRs and Review inbox PRs it holds.
   counts: { assignedPRs: number; reviewInbox: number };
-  // Grouped by Feature, the Feature with the most recently updated PR first,
-  // each Feature's PRs in Ticket order, then Unfiled, most recently updated
-  // first.
+  // Grouped by Feature: Unfiled first, its PRs most recently updated first,
+  // then the Features by name, ignoring case, those of one name with the most
+  // recently updated PR first, each Feature's PRs in Ticket order.
   assignedPRs: AssignedPRGroup[];
   // Grouped by Feature in a GitHub repository, as Assigned PRs are, and all
   // Unfiled elsewhere. Unfiled, and PRs a Feature's Ticket order leaves
@@ -183,6 +186,7 @@ function assignedPRRow(pr: AssignedPR, now: Date): AssignedPRRow {
     pendingReview: pr.pendingReview,
     reviewers: reviewerRows(pr, latestFirst),
     updatedAgo: timeAgo(pr.updatedAt, now),
+    updatedAt: pr.updatedAt,
     reviews: latestFirst.map((review) => ({
       reviewer: review.author,
       state: REVIEW_STATES[review.state],
@@ -192,10 +196,11 @@ function assignedPRRow(pr: AssignedPR, now: Date): AssignedPRRow {
   };
 }
 
-// `prs` under the Feature whose Ticket `links` them, the Feature with the
-// most recently updated PR first, each Feature's PRs in Ticket order, those
-// not among its Tickets last. The PRs no Ticket links are Unfiled, last. PRs
-// Ticket order leaves tied, and Unfiled PRs, are in `order`.
+// `prs` under the Feature whose Ticket `links` them, the Features by name,
+// ignoring case, those of one name with the most recently updated PR first,
+// each Feature's PRs in Ticket order, those not among its Tickets last. The
+// PRs no Ticket links are Unfiled, first. PRs Ticket order leaves tied, and
+// Unfiled PRs, are in `order`.
 function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
   prs: PR[],
   links: FeatureLink[],
@@ -216,13 +221,16 @@ function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
     }
   }
   const groups = [...features.values()]
-    .toSorted((a, b) => lastUpdated(b.prs) - lastUpdated(a.prs))
+    .toSorted(
+      (a, b) =>
+        a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) || lastUpdated(b.prs) - lastUpdated(a.prs),
+    )
     .map(({ name, prs }) => ({
       feature: name,
       // Infinity minus Infinity is NaN, which leaves two PRs to `order`.
       prs: prs.toSorted((a, b) => ticketOrder(a) - ticketOrder(b) || order(a, b)).map(row),
     }));
-  return unfiled.length === 0 ? groups : [...groups, { feature: null, prs: unfiled.toSorted(order).map(row) }];
+  return unfiled.length === 0 ? groups : [{ feature: null, prs: unfiled.toSorted(order).map(row) }, ...groups];
 }
 
 // `repositories`, in order, under their owners, owners by name.
@@ -266,7 +274,14 @@ export function pageModel(state: State, now: Date): PageModel {
           title: pr.title,
           url: pr.url,
           author: pr.author,
-          request: pr.request === null ? null : { by: pr.request.by, ago: timeAgo(pr.request.waitingSince, now) },
+          request:
+            pr.request === null
+              ? null
+              : {
+                  by: pr.request.by,
+                  ago: timeAgo(pr.request.waitingSince, now),
+                  waitingSince: pr.request.waitingSince,
+                },
           reRequest: pr.reRequest,
         }),
       ),

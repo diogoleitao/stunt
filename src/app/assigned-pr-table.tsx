@@ -8,6 +8,8 @@ import { cn } from "@/lib/utils";
 import type { AssignedPRGroup, AssignedPRRow, ReviewerRow, ReviewRow, ReviewStatus } from "../stunt/page-model.ts";
 import { Badge } from "./badge.tsx";
 import { FeatureGroups } from "./feature-groups.tsx";
+import { SortableHead } from "./sortable-head.tsx";
+import { type AssignedPRColumn, nextSort, type Sort, sortedAssignedPRs } from "./sorted-groups.ts";
 
 const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"] | ReviewerRow["state"], string> = {
   "review required": "border-border text-muted-foreground",
@@ -20,11 +22,14 @@ const STATE_STYLES: Record<ReviewStatus | ReviewRow["state"] | ReviewerRow["stat
 
 const PENDING_REVIEW_STYLE = "border-amber-600/30 bg-amber-600/10 text-amber-700 dark:text-amber-400";
 
-// A repository's Assigned PRs, under their Feature headings. A row shows
-// Pending review, or else where each reviewer stands. Opening a row shows
-// each reviewer's latest review and who a review is still requested from.
+// A repository's Assigned PRs, under their Feature headings, sorted within
+// them by PR or Updated when that heading is clicked. A row shows Pending
+// review, or else where each reviewer stands. Opening a row shows each
+// reviewer's latest review and who a review is still requested from.
 export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
   const [open, setOpen] = useState<ReadonlySet<number>>(new Set());
+  const [sort, setSort] = useState<Sort<AssignedPRColumn>>(null);
+  const sortBy = (column: AssignedPRColumn) => setSort((current) => nextSort(current, column));
 
   const toggle = (number: number) => {
     setOpen((current) => {
@@ -36,17 +41,21 @@ export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
 
   return (
     <FeatureGroups
-      groups={groups}
+      groups={sortedAssignedPRs(groups, sort)}
       columns={7}
       header={
         <TableRow>
           <TableHead className="w-8" />
-          <TableHead className="w-20">PR</TableHead>
+          <SortableHead column="pr" sort={sort} onSort={sortBy} className="w-20">
+            PR
+          </SortableHead>
           <TableHead>Title</TableHead>
           <TableHead>Author</TableHead>
           <TableHead>Review status</TableHead>
           <TableHead>Reviewers</TableHead>
-          <TableHead className="text-right">Updated</TableHead>
+          <SortableHead column="updated" sort={sort} onSort={sortBy} className="text-right">
+            Updated
+          </SortableHead>
         </TableRow>
       }
       rows={(prs) =>
