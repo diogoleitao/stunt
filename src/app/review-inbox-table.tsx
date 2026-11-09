@@ -1,21 +1,34 @@
+"use client";
+
+import { useState } from "react";
 import { TableCell, TableHead, TableRow } from "@/components/ui/table";
 import type { ReviewInboxGroup } from "../stunt/page-model.ts";
 import { Badge } from "./badge.tsx";
 import { FeatureGroups } from "./feature-groups.tsx";
+import { SortableHead } from "./sortable-head.tsx";
+import { nextSort, type ReviewInboxColumn, type Sort, sortedReviewInbox } from "./sorted-groups.ts";
 
-// A repository's Review inbox, under its Feature headings.
+// A repository's Review inbox, under its Feature headings, sorted within them
+// by PR or Requested when that heading is clicked.
 export function ReviewInboxTable({ groups }: { groups: ReviewInboxGroup[] }) {
+  const [sort, setSort] = useState<Sort<ReviewInboxColumn>>(null);
+  const sortBy = (column: ReviewInboxColumn) => setSort((current) => nextSort(current, column));
+
   return (
     <FeatureGroups
-      groups={groups}
+      groups={sortedReviewInbox(groups, sort)}
       columns={5}
       header={
         <TableRow>
-          <TableHead className="w-20">PR</TableHead>
+          <SortableHead column="pr" sort={sort} onSort={sortBy} className="w-20">
+            PR
+          </SortableHead>
           <TableHead>Title</TableHead>
           <TableHead>Author</TableHead>
           <TableHead>Requested by</TableHead>
-          <TableHead className="text-right">Requested</TableHead>
+          <SortableHead column="requested" sort={sort} onSort={sortBy} className="text-right">
+            Requested
+          </SortableHead>
         </TableRow>
       }
       rows={(prs) =>
