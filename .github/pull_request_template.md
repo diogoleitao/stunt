@@ -14,7 +14,7 @@ Closes #[issue]. [One sentence: what exists now that did not before, in GLOSSARY
 
 - **Before:** [failing test, command output, or what the page showed on `main`]
 - **After:** [the same thing now]
-- **Tests:** `npm test`: [n] passed. `npm run typecheck`: clean. New cases: [one line per test name]
+- **Tests:** `npm test`: [n] passed. `npm run typecheck`: [clean, or the errors]. New cases: [one line per test name]
 - **Manual:** [commands and output from a run against a scratch `config.json` and `state.json`, or "none"]
 - **Not tested:** [parts the new tests leave untested, and parts not exercised in a browser, or "none"]
 
