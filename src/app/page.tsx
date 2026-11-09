@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import { cn } from "@/lib/utils";
 import type { OwnerRow } from "../stunt/page-model.ts";
 import { appStunt } from "./app-stunt.ts";
+import { PulsingCount } from "./pulsing-count.tsx";
 
 // The dashboard: a row of cards per owner, each card a repository's counts.
 export default async function DashboardPage() {
@@ -45,7 +46,7 @@ function CardCount({ label, value }: { label: string; value: number }) {
   return (
     <span className={cn("flex justify-between text-sm", value === 0 && "text-muted-foreground")}>
       {label}
-      <span className="tabular-nums">{value}</span>
+      <PulsingCount value={value} className="tabular-nums" />
     </span>
   );
 }

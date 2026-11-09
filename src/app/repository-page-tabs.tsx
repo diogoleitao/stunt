@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Tabs } from "radix-ui";
 import { type ReactNode, useEffect, useRef } from "react";
 import type { RepositoryModel } from "../stunt/page-model.ts";
+import { PulsingCount } from "./pulsing-count.tsx";
 import type { RepositoryTab } from "./repository-href.ts";
 import { repositoryTabs } from "./repository-tabs.ts";
 
@@ -57,7 +58,9 @@ export function RepositoryPageTabs({
             className="-mb-px flex items-center gap-1 rounded-t-md border-b-2 border-transparent px-1 pb-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=active]:border-foreground data-[state=active]:text-foreground"
           >
             {row.label}
-            <span className="font-normal text-muted-foreground tabular-nums">({row.count})</span>
+            <span className="font-normal text-muted-foreground tabular-nums">
+              (<PulsingCount key={name} value={row.count} />)
+            </span>
           </Tabs.Trigger>
         ))}
       </Tabs.List>
