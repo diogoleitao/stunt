@@ -1,7 +1,8 @@
 import type { State } from "../data/store.ts";
-import { type AssignedPR, type Review, type ReviewInboxPR, requestTime } from "../github/prs.ts";
+import type { AssignedPR, Review, ReviewInboxPR } from "../github/prs.ts";
 import type { FeatureLink } from "./features.ts";
 import type { IssueTracker } from "./issue-trackers.ts";
+import { requestTime } from "./request-time.ts";
 
 export type ReviewStatus = "review required" | "approved" | "changes requested";
 
@@ -79,8 +80,9 @@ export type RepositoryModel = {
   // How many Assigned PRs and Review inbox PRs it holds.
   counts: { assignedPRs: number; reviewInbox: number };
   // Grouped by Feature: Unfiled first, its PRs most recently updated first,
-  // then the Features by name, ignoring case, those of one name with the most
-  // recently updated PR first, each Feature's PRs in Ticket order.
+  // then the Features by name, ignoring case, numbers in it by value, those of
+  // one name with the most recently updated PR first, each Feature's PRs in
+  // Ticket order.
   assignedPRs: AssignedPRGroup[];
   // Grouped by Feature in a GitHub repository, as Assigned PRs are, and all
   // Unfiled elsewhere. Unfiled, and PRs a Feature's Ticket order leaves
@@ -196,11 +198,15 @@ function assignedPRRow(pr: AssignedPR, now: Date): AssignedPRRow {
   };
 }
 
-// `prs` under the Feature whose Ticket `links` them, the Features by name,
-// ignoring case, those of one name with the most recently updated PR first,
-// each Feature's PRs in Ticket order, those not among its Tickets last. The
-// PRs no Ticket links are Unfiled, first. PRs Ticket order leaves tied, and
-// Unfiled PRs, are in `order`.
+// Feature names in English order, ignoring case, numbers in them by value, so
+// "Feature 2" comes before "Feature 10" on any host.
+const FEATURE_NAMES = new Intl.Collator("en", { sensitivity: "accent", numeric: true });
+
+// `prs` under the Feature whose Ticket `links` them, the Features by name, in
+// `FEATURE_NAMES` order, those of one name with the most recently updated PR
+// first, each Feature's PRs in Ticket order, those not among its Tickets last.
+// The PRs no Ticket links are Unfiled, first. PRs Ticket order leaves tied,
+// and Unfiled PRs, are in `order`.
 function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
   prs: PR[],
   links: FeatureLink[],
@@ -221,10 +227,7 @@ function featureGroups<PR extends { number: number; updatedAt: string }, Row>(
     }
   }
   const groups = [...features.values()]
-    .toSorted(
-      (a, b) =>
-        a.name.localeCompare(b.name, undefined, { sensitivity: "accent" }) || lastUpdated(b.prs) - lastUpdated(a.prs),
-    )
+    .toSorted((a, b) => FEATURE_NAMES.compare(a.name, b.name) || lastUpdated(b.prs) - lastUpdated(a.prs))
     .map(({ name, prs }) => ({
       feature: name,
       // Infinity minus Infinity is NaN, which leaves two PRs to `order`.

@@ -1,4 +1,5 @@
-import { requestTime, type ReviewInboxPR } from "../github/prs.ts";
+import type { ReviewInboxPR } from "../github/prs.ts";
+import { requestTime } from "./request-time.ts";
 
 // The desktop announcement of a repository's new Review requests.
 export type Notification = {

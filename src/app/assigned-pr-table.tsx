@@ -43,21 +43,21 @@ export function AssignedPRTable({ groups }: { groups: AssignedPRGroup[] }) {
     <FeatureGroups
       groups={sortedAssignedPRs(groups, sort)}
       columns={7}
-      header={
+      header={(repeat) => (
         <TableRow>
           <TableHead className="w-8" />
-          <SortableHead column="pr" sort={sort} onSort={sortBy} className="w-20">
+          <SortableHead column="pr" sort={sort} onSort={sortBy} repeat={repeat} className="w-20">
             PR
           </SortableHead>
           <TableHead>Title</TableHead>
           <TableHead>Author</TableHead>
           <TableHead>Review status</TableHead>
           <TableHead>Reviewers</TableHead>
-          <SortableHead column="updated" sort={sort} onSort={sortBy} className="text-right">
+          <SortableHead column="updated" sort={sort} onSort={sortBy} repeat={repeat} className="text-right">
             Updated
           </SortableHead>
         </TableRow>
-      }
+      )}
       rows={(prs) =>
         prs.map((pr) => {
           const expanded = open.has(pr.number);

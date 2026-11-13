@@ -5,9 +5,9 @@ import type { FeatureGroup } from "../stunt/page-model.ts";
 
 // PRs in one table, under a heading per Feature, or Unfiled, so their
 // columns line up across groups. Each group repeats `header`, the row of
-// column headings, `columns` wide, and shows its PRs as `rows`. Two Features
-// may share a name, so a repeated name is keyed by how many times it has
-// come up.
+// column headings, `columns` wide, told whether it is a repeat of the first
+// group's, and shows its PRs as `rows`. Two Features may share a name, so a
+// repeated name is keyed by how many times it has come up.
 export function FeatureGroups<Row>({
   groups,
   columns,
@@ -16,7 +16,7 @@ export function FeatureGroups<Row>({
 }: {
   groups: FeatureGroup<Row>[];
   columns: number;
-  header: ReactNode;
+  header: (repeat: boolean) => ReactNode;
   rows: (prs: Row[]) => ReactNode;
 }) {
   const seen = new Map<string, number>();
@@ -36,7 +36,7 @@ export function FeatureGroups<Row>({
                 {name}
               </TableCell>
             </TableRow>
-            {header}
+            {header(index > 0)}
             {rows(group.prs)}
           </TableBody>
         );
