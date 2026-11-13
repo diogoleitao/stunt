@@ -18,19 +18,19 @@ export function ReviewInboxTable({ groups }: { groups: ReviewInboxGroup[] }) {
     <FeatureGroups
       groups={sortedReviewInbox(groups, sort)}
       columns={5}
-      header={
+      header={(repeat) => (
         <TableRow>
-          <SortableHead column="pr" sort={sort} onSort={sortBy} className="w-20">
+          <SortableHead column="pr" sort={sort} onSort={sortBy} repeat={repeat} className="w-20">
             PR
           </SortableHead>
           <TableHead>Title</TableHead>
           <TableHead>Author</TableHead>
           <TableHead>Requested by</TableHead>
-          <SortableHead column="requested" sort={sort} onSort={sortBy} className="text-right">
+          <SortableHead column="requested" sort={sort} onSort={sortBy} repeat={repeat} className="text-right">
             Requested
           </SortableHead>
         </TableRow>
-      }
+      )}
       rows={(prs) =>
         prs.map((pr) => (
           <TableRow key={pr.number}>

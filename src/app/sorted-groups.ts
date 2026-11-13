@@ -5,6 +5,7 @@ import type {
   ReviewInboxGroup,
   ReviewInboxRow,
 } from "../stunt/page-model.ts";
+import { requestTime } from "../stunt/request-time.ts";
 
 // A table's sort by one of its sortable columns, or null for the default
 // order.
@@ -44,11 +45,11 @@ export function sortedAssignedPRs(groups: AssignedPRGroup[], sort: Sort<Assigned
   });
 }
 
-// A repository's Review inbox ordered by `sort` within its groups. A request
-// too old for the check to have read is older than any other.
+// A repository's Review inbox ordered by `sort` within its groups, Requested
+// in `requestTime` order, as the default order is.
 export function sortedReviewInbox(groups: ReviewInboxGroup[], sort: Sort<ReviewInboxColumn>): ReviewInboxGroup[] {
   return sortedGroups(groups, sort, {
     pr: (row: ReviewInboxRow) => row.number,
-    requested: (row: ReviewInboxRow) => (row.request === null ? -Infinity : Date.parse(row.request.waitingSince)),
+    requested: requestTime,
   });
 }

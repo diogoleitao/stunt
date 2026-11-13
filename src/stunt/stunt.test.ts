@@ -1548,10 +1548,10 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
       { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
       { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
     ]);
-    expect(groupsOf(model, "owner-2/repo-4")).toContainEqual({
-      feature: "Cart pending changes",
-      prs: rows("owner-2/repo-4", 25, 27),
-    });
+    expect(groupsOf(model, "owner-2/repo-4")).toEqual([
+      { feature: null, prs: rows("owner-2/repo-4", 28) },
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
+    ]);
     expect(github.scratchCalls).toHaveLength(1);
     const { variables } = github.scratchCalls[0];
     const asked = Object.keys(variables)
@@ -1655,7 +1655,7 @@ describe("Feature grouping in a GitHub repository", () => {
     ]);
   });
 
-  it("orders Features by name, ignoring case, and Features of one name by their most recently updated PR", async () => {
+  it("orders Features by name, ignoring case, numbers in it by value, and Features of one name by their most recently updated PR", async () => {
     const response = structuredClone(assignedFull);
     // #10420 was updated last, then #10412, then #9968.
     withBody("Closes #20")(response.data.assigned.nodes.find((pr) => pr.number === 10420) as object);
@@ -1671,18 +1671,18 @@ describe("Feature grouping in a GitHub repository", () => {
     });
     const app = stunt(
       fakeGitHub([checkResponse(response)], GITHUB_TRACKER, {
-        "owner-1/repo-2#12": ticketUnder(12, 1, "feature 1"),
-        "owner-1/repo-2#20": ticketUnder(20, 15, "Feature 1"),
-        "owner-1/repo-2#30": ticketUnder(30, 16, "beta"),
+        "owner-1/repo-2#12": ticketUnder(12, 1, "feature 2"),
+        "owner-1/repo-2#20": ticketUnder(20, 15, "Feature 2"),
+        "owner-1/repo-2#30": ticketUnder(30, 16, "Feature 10"),
       }),
     );
 
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "beta", prs: rows("owner-1/repo-2", 9968) },
-      { feature: "Feature 1", prs: rows("owner-1/repo-2", 10420) },
-      { feature: "feature 1", prs: rows("owner-1/repo-2", 10412) },
+      { feature: "Feature 2", prs: rows("owner-1/repo-2", 10420) },
+      { feature: "feature 2", prs: rows("owner-1/repo-2", 10412) },
+      { feature: "Feature 10", prs: rows("owner-1/repo-2", 9968) },
     ]);
   });
 
