@@ -5,10 +5,11 @@ Closes #[issue]. [One sentence: what exists now that did not before, in GLOSSARY
 <!-- Use "Part of #[issue]." instead when the PR does not meet every acceptance criterion. -->
 <!-- The smallest view that makes the point: diff of the model, routes, CLI or file tree; pseudocode for rules. One block per concern. -->
 
-<!-- Optional, delete the ones that do not apply: -->
+<!-- Optional, move the ones that apply out of this comment:
 - **Dependencies:** [added or removed packages, and why]
-- **Config file:** [new or changed keys, and whether older builds still load it]
+- **Config or state file:** [changed keys or `state.json` shape, and the migration]
 - **Glossary:** [terms added or changed]
+-->
 
 ## Evidence
 
@@ -16,7 +17,7 @@ Closes #[issue]. [One sentence: what exists now that did not before, in GLOSSARY
 - **After:** [the same thing now]
 - **Tests:** `npm test`: [n] passed. `npm run typecheck`: [clean, or the errors]. New cases: [one line per test name]
 - **Manual:** [commands and output from a run against a scratch `config.json` and `state.json`, or "none"]
-- **Not tested:** [parts the new tests leave untested, and parts not exercised in a browser, or "none"]
+- **Not tested:** [parts the new tests leave untested, and parts not run in a browser or through the CLI, or "none"]
 
 ## Merge Danger
 
