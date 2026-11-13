@@ -1,5 +1,5 @@
-import type { GitHubClient } from "./client.ts";
-import { dataOf } from "./graphql.ts";
+import type { GitHubClient } from './client.ts'
+import { dataOf } from './graphql.ts'
 
 export type AssignedPR = {
   repository: string;
@@ -20,7 +20,7 @@ export type AssignedPR = {
   pendingReview: boolean;
   // The issue its body names as its Ticket, null when it names none.
   ticket: number | null;
-};
+}
 
 // An open PR with a direct Review request still pending for the viewer.
 export type ReviewInboxPR = {
@@ -39,27 +39,27 @@ export type ReviewInboxPR = {
   request: { by: string; requestedAt: string; waitingSince: string } | null;
   // Whether the viewer had submitted a review before the latest request.
   reRequest: boolean;
-};
-
-// A request too old for the check to have read is older than any other.
-export function requestTime({ request }: Pick<ReviewInboxPR, "request">): number {
-  return request === null ? -Infinity : Date.parse(request.waitingSince);
 }
 
-export type ReviewDecision = "REVIEW_REQUIRED" | "APPROVED" | "CHANGES_REQUESTED";
+// A request too old for the check to have read is older than any other.
+export function requestTime ({ request }: Pick<ReviewInboxPR, 'request'>): number {
+  return request === null ? -Infinity : Date.parse(request.waitingSince)
+}
+
+export type ReviewDecision = 'REVIEW_REQUIRED' | 'APPROVED' | 'CHANGES_REQUESTED'
 
 export type Review = {
   author: string;
-  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED";
+  state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED';
   submittedAt: string;
-};
+}
 
 // GitHub's largest page. A check makes one query, and more only when a page
 // overflows.
-const PAGE_SIZE = 100;
+const PAGE_SIZE = 100
 
 // A PR by its repository and number.
-export type PRRef = { repository: string; number: number };
+export type PRRef = { repository: string; number: number }
 
 // One check: the viewer, every open PR listing the viewer as an assignee,
 // drafts included, whoever authored it, and every open PR with a Review
@@ -131,20 +131,20 @@ fragment PR on PullRequest {
       }
     }
   }
-}`;
+}`
 
 type RequestedReviewer =
-  | { __typename: "User" | "Bot" | "Mannequin"; login: string }
-  | { __typename: "Team"; combinedSlug: string }
-  | null;
+  | { __typename: 'User' | 'Bot' | 'Mannequin'; login: string }
+  | { __typename: 'Team'; combinedSlug: string }
+  | null
 
 type ReviewNode =
-  | { state: Review["state"]; submittedAt: string; author: { login: string } | null }
-  | { state: "PENDING"; submittedAt: null; author: { login: string } | null };
+  | { state: Review['state']; submittedAt: string; author: { login: string } | null }
+  | { state: 'PENDING'; submittedAt: null; author: { login: string } | null }
 
 type PRNode = {
   number: number;
-  state: "OPEN" | "CLOSED" | "MERGED";
+  state: 'OPEN' | 'CLOSED' | 'MERGED';
   isDraft: boolean;
   title: string;
   url: string;
@@ -155,7 +155,7 @@ type PRNode = {
   reviewDecision: ReviewDecision | null;
   reviews: { nodes: ReviewNode[] };
   reviewRequests: { nodes: { requestedReviewer: RequestedReviewer }[] };
-};
+}
 
 type InboxNode = PRNode & {
   timelineItems: {
@@ -163,61 +163,61 @@ type InboxNode = PRNode & {
   };
   // When the PR was last marked ready for review, if ever.
   readyEvents: { nodes: { createdAt: string }[] };
-};
+}
 
 type SearchPage<Node> = {
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
   nodes: Node[];
-};
+}
 
 type CheckData = {
   viewer: { login: string };
   assigned?: SearchPage<PRNode>;
   inbox?: SearchPage<InboxNode>;
-};
+}
 
-function decode(body: unknown): CheckData {
-  const data = dataOf<CheckData>(body);
-  if (data?.viewer === undefined) throw new Error("GitHub GraphQL response has no viewer");
-  return data;
+function decode (body: unknown): CheckData {
+  const data = dataOf<CheckData>(body)
+  if (data?.viewer === undefined) throw new Error('GitHub GraphQL response has no viewer')
+  return data
 }
 
 // One search's paging: whether it has another page, and the cursor to ask
 // for it after.
-type Paging = { more: boolean; after: string | null };
+type Paging = { more: boolean; after: string | null }
 
-function follow<Node>(paging: Paging, page: SearchPage<Node> | undefined, into: Node[]): void {
-  if (page === undefined) throw new Error("GitHub GraphQL response has no search results");
-  into.push(...page.nodes);
-  paging.more = page.pageInfo.hasNextPage;
-  paging.after = page.pageInfo.endCursor;
+function follow<Node> (paging: Paging, page: SearchPage<Node> | undefined, into: Node[]): void {
+  if (page === undefined) throw new Error('GitHub GraphQL response has no search results')
+  into.push(...page.nodes)
+  paging.more = page.pageInfo.hasNextPage
+  paging.after = page.pageInfo.endCursor
 }
 
 // A deleted account shows as GitHub's ghost user.
-function login(actor: { login: string } | null): string {
-  return actor?.login ?? "ghost";
+function login (actor: { login: string } | null): string {
+  return actor?.login ?? 'ghost'
 }
 
-function submittedReviews(node: PRNode): Review[] {
+function submittedReviews (node: PRNode): Review[] {
   return node.reviews.nodes.flatMap((review) =>
-    review.state === "PENDING"
+    review.state === 'PENDING'
       ? []
-      : [{ author: login(review.author), state: review.state, submittedAt: review.submittedAt }],
-  );
+      : [{ author: login(review.author), state: review.state, submittedAt: review.submittedAt }]
+  )
 }
 
 // The line by which a PR's body names its Ticket, in any case, as GitHub
 // reads `closes #N`. Any other mention of an issue does not name it.
-const TICKET_LINE = /^(?:Closes|Part of) #(\d+)\b/im;
+const TICKET_LINE = /^(?:Closes|Part of) #(\d+)\b/im
 
 // The issue a PR's body names as its Ticket, by its first Ticket line.
-function ticket(node: PRNode): number | null {
-  const number = TICKET_LINE.exec(node.body)?.[1];
-  return number === undefined ? null : Number(number);
+function ticket (node: PRNode): number | null {
+  const number = TICKET_LINE.exec(node.body)?.[1]
+  return number === undefined ? null : Number(number)
 }
 
-function assignedPR(node: PRNode, viewer: string): AssignedPR {
-  const reviews = submittedReviews(node);
+function assignedPR (node: PRNode, viewer: string): AssignedPR {
+  const reviews = submittedReviews(node)
   return {
     repository: node.repository.nameWithOwner,
     number: node.number,
@@ -230,43 +230,43 @@ function assignedPR(node: PRNode, viewer: string): AssignedPR {
     reviews,
     // A request whose reviewer the viewer cannot see has no reviewer.
     pendingReviewers: node.reviewRequests.nodes.flatMap(({ requestedReviewer: reviewer }) => {
-      if (reviewer === null) return [];
-      return [reviewer.__typename === "Team" ? reviewer.combinedSlug : reviewer.login];
+      if (reviewer === null) return []
+      return [reviewer.__typename === 'Team' ? reviewer.combinedSlug : reviewer.login]
     }),
     pendingReview:
       login(node.author) !== viewer &&
       (isRequested(node, viewer) || !reviews.some((review) => review.author === viewer)),
     ticket: ticket(node),
-  };
+  }
 }
 
 // Whether a review is requested from the viewer directly, not through a team.
-function isViewer(reviewer: RequestedReviewer, viewer: string): boolean {
-  return reviewer !== null && reviewer.__typename === "User" && reviewer.login === viewer;
+function isViewer (reviewer: RequestedReviewer, viewer: string): boolean {
+  return reviewer !== null && reviewer.__typename === 'User' && reviewer.login === viewer
 }
 
 // Whether a direct Review request is still pending for the viewer.
-function isRequested(node: PRNode, viewer: string): boolean {
-  return node.reviewRequests.nodes.some(({ requestedReviewer }) => isViewer(requestedReviewer, viewer));
+function isRequested (node: PRNode, viewer: string): boolean {
+  return node.reviewRequests.nodes.some(({ requestedReviewer }) => isViewer(requestedReviewer, viewer))
 }
 
 // The latest direct Review request event for the viewer, if the query read it.
-function latestRequest(node: InboxNode, viewer: string) {
-  return node.timelineItems.nodes.findLast(({ requestedReviewer }) => isViewer(requestedReviewer, viewer));
+function latestRequest (node: InboxNode, viewer: string) {
+  return node.timelineItems.nodes.findLast(({ requestedReviewer }) => isViewer(requestedReviewer, viewer))
 }
 
 // A request made while the PR was a draft waits from when the PR was marked
 // ready.
-function waitingSince(requestedAt: string, readyAt: string | undefined): string {
-  return readyAt !== undefined && Date.parse(readyAt) > Date.parse(requestedAt) ? readyAt : requestedAt;
+function waitingSince (requestedAt: string, readyAt: string | undefined): string {
+  return readyAt !== undefined && Date.parse(readyAt) > Date.parse(requestedAt) ? readyAt : requestedAt
 }
 
 // The PR when it is in the viewer's Review inbox. Review requests on drafts
 // are ignored until the PR is marked ready.
-function reviewInboxPR(node: InboxNode, viewer: string): ReviewInboxPR | undefined {
-  if (node.isDraft || !isRequested(node, viewer)) return undefined;
-  const request = latestRequest(node, viewer);
-  const readyAt = node.readyEvents.nodes.at(-1)?.createdAt;
+function reviewInboxPR (node: InboxNode, viewer: string): ReviewInboxPR | undefined {
+  if (node.isDraft || !isRequested(node, viewer)) return undefined
+  const request = latestRequest(node, viewer)
+  const readyAt = node.readyEvents.nodes.at(-1)?.createdAt
   return {
     repository: node.repository.nameWithOwner,
     number: node.number,
@@ -287,26 +287,26 @@ function reviewInboxPR(node: InboxNode, viewer: string): ReviewInboxPR | undefin
     reRequest:
       request !== undefined &&
       submittedReviews(node).some(
-        (review) => review.author === viewer && Date.parse(review.submittedAt) < Date.parse(request.createdAt),
+        (review) => review.author === viewer && Date.parse(review.submittedAt) < Date.parse(request.createdAt)
       ),
-  };
+  }
 }
 
 // What a check saw.
 export type CheckedPRs = {
   assignedPRs: AssignedPR[];
   reviewInbox: ReviewInboxPR[];
-};
+}
 
-export async function fetchPRs(github: GitHubClient): Promise<CheckedPRs> {
-  const assigned: PRNode[] = [];
-  const inbox: InboxNode[] = [];
-  const assignedPaging: Paging = { more: true, after: null };
-  const inboxPaging: Paging = { more: true, after: null };
-  let viewer = "";
+export async function fetchPRs (github: GitHubClient): Promise<CheckedPRs> {
+  const assigned: PRNode[] = []
+  const inbox: InboxNode[] = []
+  const assignedPaging: Paging = { more: true, after: null }
+  const inboxPaging: Paging = { more: true, after: null }
+  let viewer = ''
   while (assignedPaging.more || inboxPaging.more) {
-    const withAssigned = assignedPaging.more;
-    const withInbox = inboxPaging.more;
+    const withAssigned = assignedPaging.more
+    const withInbox = inboxPaging.more
     const data = decode(
       await github.graphql(CHECK_QUERY, {
         first: PAGE_SIZE,
@@ -314,18 +314,18 @@ export async function fetchPRs(github: GitHubClient): Promise<CheckedPRs> {
         assignedAfter: assignedPaging.after,
         inbox: withInbox,
         inboxAfter: inboxPaging.after,
-      }),
-    );
-    viewer = data.viewer.login;
-    if (withAssigned) follow(assignedPaging, data.assigned, assigned);
-    if (withInbox) follow(inboxPaging, data.inbox, inbox);
+      })
+    )
+    viewer = data.viewer.login
+    if (withAssigned) follow(assignedPaging, data.assigned, assigned)
+    if (withInbox) follow(inboxPaging, data.inbox, inbox)
   }
-  const open = (node: PRNode) => node.state === "OPEN";
+  const open = (node: PRNode) => node.state === 'OPEN'
   return {
     assignedPRs: assigned.filter(open).map((node) => assignedPR(node, viewer)),
     reviewInbox: inbox
       .filter(open)
       .map((node) => reviewInboxPR(node, viewer))
       .filter((pr) => pr !== undefined),
-  };
+  }
 }
