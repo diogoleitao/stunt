@@ -8,7 +8,13 @@ updates:
       prefix: chore
       include: scope
     groups:
-      minor-and-patch:
+      production:
+        dependency-type: production
+        update-types:
+          - minor
+          - patch
+      development:
+        dependency-type: development
         update-types:
           - minor
           - patch
