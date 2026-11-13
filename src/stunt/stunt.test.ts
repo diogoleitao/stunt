@@ -337,6 +337,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "changes requested",
           updatedAgo: "15 days ago",
+          updatedAt: "2026-10-16T14:23:50Z",
           reviewers: [{ reviewer: "user-2", state: "changes requested" }],
           reviews: [{ reviewer: "user-2", state: "changes requested", submittedAgo: "2 months ago" }],
           pendingReviewers:[],
@@ -358,6 +359,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "review required",
           updatedAgo: "1 day ago",
+          updatedAt: "2026-10-30T17:15:20Z",
           reviewers: [{ reviewer: "user-2", state: "commented" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "1 day ago" }],
           pendingReviewers:[],
@@ -371,6 +373,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "review required",
           updatedAgo: "2 days ago",
+          updatedAt: "2026-10-29T15:32:37Z",
           reviewers: [{ reviewer: "user-2", state: "pending" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "2 days ago" }],
           pendingReviewers:["user-2"],
@@ -384,6 +387,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "changes requested",
           updatedAgo: "15 days ago",
+          updatedAt: "2026-10-16T14:23:42Z",
           reviewers: [
             { reviewer: "user-2", state: "changes requested" },
             { reviewer: "user-3", state: "approved" },
@@ -412,6 +416,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "review required",
           updatedAgo: "5 days ago",
+          updatedAt: "2026-10-26T15:56:29Z",
           reviewers: [],
           reviews: [],
           pendingReviewers:[],
@@ -435,6 +440,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "review required",
           updatedAgo: "just now",
+          updatedAt: "2026-11-02T09:39:38Z",
           reviewers: [{ reviewer: "user-2", state: "commented" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "just now" }],
           pendingReviewers:[],
@@ -448,6 +454,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "review required",
           updatedAgo: "just now",
+          updatedAt: "2026-11-02T09:16:05Z",
           reviewers: [{ reviewer: "user-2", state: "commented" }],
           reviews: [{ reviewer: "user-2", state: "commented", submittedAgo: "just now" }],
           pendingReviewers:[],
@@ -461,6 +468,7 @@ const ALL_ASSIGNED = {
           pendingReview: false,
           reviewStatus: "approved",
           updatedAgo: "just now",
+          updatedAt: "2026-11-02T09:14:42Z",
           reviewers: [{ reviewer: "user-2", state: "approved" }],
           reviews: [{ reviewer: "user-2", state: "approved", submittedAgo: "21 hours ago" }],
           pendingReviewers:[],
@@ -820,7 +828,7 @@ describe("the Review inbox", () => {
         title: "Review inbox PR 13",
         url: "https://github.com/owner-1/repo-2/pull/10255",
         author: "user-2",
-        request: { by: "user-2", ago: "5 days ago" },
+        request: { by: "user-2", ago: "5 days ago", waitingSince: "2026-10-26T14:13:57Z" },
         reRequest: false,
       },
       {
@@ -828,7 +836,7 @@ describe("the Review inbox", () => {
         title: "Review inbox PR 11",
         url: "https://github.com/owner-1/repo-2/pull/10306",
         author: "user-2",
-        request: { by: "user-2", ago: "5 days ago" },
+        request: { by: "user-2", ago: "5 days ago", waitingSince: "2026-10-26T14:14:07Z" },
         reRequest: false,
       },
       // Requested three times; I reviewed between the first and the second.
@@ -837,7 +845,7 @@ describe("the Review inbox", () => {
         title: "Review inbox PR 5",
         url: "https://github.com/owner-1/repo-2/pull/10404",
         author: "user-3",
-        request: { by: "user-3", ago: "2 days ago" },
+        request: { by: "user-3", ago: "2 days ago", waitingSince: "2026-10-30T11:56:08Z" },
         reRequest: true,
       },
       {
@@ -845,7 +853,7 @@ describe("the Review inbox", () => {
         title: "Review inbox PR 1",
         url: "https://github.com/owner-1/repo-2/pull/10419",
         author: "user-5",
-        request: { by: "user-5", ago: "1 day ago" },
+        request: { by: "user-5", ago: "1 day ago", waitingSince: "2026-10-30T16:36:43Z" },
         reRequest: false,
       },
     ]);
@@ -940,7 +948,7 @@ describe("the Review inbox", () => {
       title: "Review inbox PR 1",
       url: "https://github.com/owner-1/repo-2/pull/10419",
       author: "user-5",
-      request: { by: "user-5", ago: "2 hours ago" },
+      request: { by: "user-5", ago: "2 hours ago", waitingSince: "2026-11-01T10:00:00Z" },
       reRequest: true,
     });
   });
@@ -1010,7 +1018,7 @@ describe("the Review inbox", () => {
 
     const rows = await inboxOf(readyLater, "owner-1/repo-2");
     expect(rows.map((pr) => pr.number)).toEqual([10306, 10404, 10419, 10255]);
-    expect(rows[3].request).toEqual({ by: "user-2", ago: "4 hours ago" });
+    expect(rows[3].request).toEqual({ by: "user-2", ago: "4 hours ago", waitingSince: "2026-11-01T08:00:00Z" });
   });
 
   // The query reads the last 100 Review request events of each PR.
@@ -1342,7 +1350,7 @@ describe("Feature grouping in a Local Markdown repository", () => {
     return `# ${title}\n\nStatus: ready-for-agent\n\n**PR:** #${pr} (merged 2026-10-26, squash \`f921607e9\`)\n\n## What to build\n\nThe change.\n`;
   }
 
-  it("groups an Assigned PR under the Feature, named after it, whose Ticket's PR line names it, with Unfiled last", async () => {
+  it("groups an Assigned PR under the Feature, named after it, whose Ticket's PR line names it, with Unfiled first", async () => {
     const at = await localMarkdownClone("owner-2/repo-4");
     await scratch(at, "cart-pending-changes/spec.md", "# Cart pending changes\n");
     await scratch(at, "cart-pending-changes/issues/01-reconcile-payment-step-registries.md", ticket("01. Reconcile", 25));
@@ -1351,8 +1359,8 @@ describe("Feature grouping in a Local Markdown repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
-      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25) },
       { feature: null, prs: rows("owner-2/repo-4", 28, 27) },
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25) },
     ]);
   });
 
@@ -1375,12 +1383,12 @@ describe("Feature grouping in a Local Markdown repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
-      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25) },
       { feature: null, prs: rows("owner-2/repo-4", 28, 27) },
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25) },
     ]);
   });
 
-  it("orders Features by their most recently updated PR, and each Feature's PRs by Ticket number", async () => {
+  it("orders Features by name, and each Feature's PRs by Ticket number", async () => {
     const at = await localMarkdownClone("owner-1/repo-2");
     // #10412 was updated after #9968, but its Ticket comes later.
     await scratch(at, "cart-pending-changes/issues/99-reconcile.md", ticket("99. Reconcile", 9968));
@@ -1392,8 +1400,8 @@ describe("Feature grouping in a Local Markdown repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
       { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 9968, 10412) },
+      { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
     ]);
   });
 
@@ -1406,8 +1414,8 @@ describe("Feature grouping in a Local Markdown repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 10420) },
       { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 10420) },
     ]);
   });
 
@@ -1422,8 +1430,8 @@ describe("Feature grouping in a Local Markdown repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 9968, 10412) },
       { feature: null, prs: rows("owner-1/repo-2", 10420) },
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 9968, 10412) },
     ]);
   });
 
@@ -1440,8 +1448,8 @@ describe("Feature grouping in a Local Markdown repository", () => {
     expect(inboxRows(model, "owner-1/repo-2")).toEqual(inbox);
     expect(inbox.map((pr) => pr.number)).toContain(10419);
     expect(groupsOf(model, "owner-1/repo-2")).toEqual([
-      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 10420) },
       { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+      { feature: "Cart pending changes", prs: rows("owner-1/repo-2", 10420) },
     ]);
   });
 
@@ -1466,7 +1474,7 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
     "owner-2/repo-4": { object: { text: "# Issue tracker: Local Markdown\n\nIssues and specs live in `.scratch/`.\n" } },
   };
 
-  it("groups an Assigned PR under the Feature whose Ticket on the default branch links it, named after it, in Ticket order, Unfiled last", async () => {
+  it("groups an Assigned PR under the Feature whose Ticket on the default branch links it, named after it, in Ticket order, Unfiled first", async () => {
     const github = fakeGitHub([checkResponse(assignedFull)], LOCAL_MARKDOWN_TRACKER, {}, {
       "owner-2/repo-4": SCRATCHED,
     });
@@ -1477,12 +1485,12 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
     // #28 is named only by `notes.md`, a file in `issues` that is not a
     // Ticket.
     expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
-      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
       { feature: null, prs: rows("owner-2/repo-4", 28) },
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
     ]);
   });
 
-  it("orders Features by their most recently updated PR", async () => {
+  it("orders Features by name", async () => {
     const tree = structuredClone(SCRATCHED);
     // The recorded oci-braintree Ticket links no PR; here it links #28, which
     // was updated after #25 and #27.
@@ -1499,8 +1507,8 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-2/repo-4")).toEqual([
-      { feature: "Oci braintree", prs: rows("owner-2/repo-4", 28) },
       { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
+      { feature: "Oci braintree", prs: rows("owner-2/repo-4", 28) },
     ]);
   });
 
@@ -1537,13 +1545,13 @@ describe("Feature grouping in a Local Markdown repository without a clone", () =
 
     const model = await app.pageModel();
     expect(groupsOf(model, "owner-1/repo-2")).toEqual([
-      { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
       { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+      { feature: "Oci braintree", prs: rows("owner-1/repo-2", 10420) },
     ]);
-    expect(groupsOf(model, "owner-2/repo-4")?.[0]).toEqual({
-      feature: "Cart pending changes",
-      prs: rows("owner-2/repo-4", 25, 27),
-    });
+    expect(groupsOf(model, "owner-2/repo-4")).toEqual([
+      { feature: null, prs: rows("owner-2/repo-4", 28) },
+      { feature: "Cart pending changes", prs: rows("owner-2/repo-4", 25, 27) },
+    ]);
     expect(github.scratchCalls).toHaveLength(1);
     const { variables } = github.scratchCalls[0];
     const asked = Object.keys(variables)
@@ -1597,7 +1605,7 @@ describe("Feature grouping in a GitHub repository", () => {
     return (pr: object) => Object.assign(pr, { body });
   }
 
-  it("groups a PR under the parent, named after it, of the issue its body closes, with Unfiled last", async () => {
+  it("groups a PR under the parent, named after it, of the issue its body closes, with Unfiled first", async () => {
     const response = withPR(10420, withBody("## What\n\nThe change.\n\nCloses #12\n"));
     const app = stunt(
       fakeGitHub([checkResponse(response)], GITHUB_TRACKER, { "owner-1/repo-2#12": PARENTED }),
@@ -1606,8 +1614,8 @@ describe("Feature grouping in a GitHub repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "Feature 1", prs: rows("owner-1/repo-2", 10420) },
       { feature: null, prs: rows("owner-1/repo-2", 10412, 9968) },
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 10420) },
     ]);
   });
 
@@ -1620,8 +1628,8 @@ describe("Feature grouping in a GitHub repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968) },
       { feature: null, prs: rows("owner-1/repo-2", 10420, 10412) },
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968) },
     ]);
   });
 
@@ -1647,22 +1655,25 @@ describe("Feature grouping in a GitHub repository", () => {
     ]);
   });
 
-  it("orders Features by their most recently updated PR", async () => {
+  it("orders Features by name, ignoring case, numbers in it by value, and Features of one name by their most recently updated PR", async () => {
     const response = structuredClone(assignedFull);
-    // #10420 was updated last.
+    // #10420 was updated last, then #10412, then #9968.
     withBody("Closes #20")(response.data.assigned.nodes.find((pr) => pr.number === 10420) as object);
     withBody("Closes #12")(response.data.assigned.nodes.find((pr) => pr.number === 10412) as object);
+    withBody("Closes #30")(response.data.assigned.nodes.find((pr) => pr.number === 9968) as object);
+    // Ticket `ticket` under the Feature at issue `parent`, named `title`. Each
+    // Feature keeps Feature 1's recorded Tickets, which order nothing here.
+    const ticketUnder = (ticket: number, parent: number, title: string) => ({
+      ...PARENTED,
+      url: `https://github.com/owner-1/repo-2/issues/${ticket}`,
+      title: `Ticket ${ticket}`,
+      parent: { ...PARENTED.parent, url: `https://github.com/owner-1/repo-2/issues/${parent}`, title },
+    });
     const app = stunt(
       fakeGitHub([checkResponse(response)], GITHUB_TRACKER, {
-        "owner-1/repo-2#12": PARENTED,
-        // Feature 2 keeps Feature 1's recorded Tickets, which order nothing
-        // here.
-        "owner-1/repo-2#20": {
-          ...PARENTED,
-          url: "https://github.com/owner-1/repo-2/issues/20",
-          title: "Ticket 3",
-          parent: { ...PARENTED.parent, url: "https://github.com/owner-1/repo-2/issues/15", title: "Feature 2" },
-        },
+        "owner-1/repo-2#12": ticketUnder(12, 1, "feature 2"),
+        "owner-1/repo-2#20": ticketUnder(20, 15, "Feature 2"),
+        "owner-1/repo-2#30": ticketUnder(30, 16, "Feature 10"),
       }),
     );
 
@@ -1670,12 +1681,12 @@ describe("Feature grouping in a GitHub repository", () => {
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
       { feature: "Feature 2", prs: rows("owner-1/repo-2", 10420) },
-      { feature: "Feature 1", prs: rows("owner-1/repo-2", 10412) },
-      { feature: null, prs: rows("owner-1/repo-2", 9968) },
+      { feature: "feature 2", prs: rows("owner-1/repo-2", 10412) },
+      { feature: "Feature 10", prs: rows("owner-1/repo-2", 9968) },
     ]);
   });
 
-  it("groups the Review inbox by Feature the same way, Unfiled last, oldest request first", async () => {
+  it("groups the Review inbox by Feature the same way, Unfiled first, oldest request first", async () => {
     const inbox = inboxRows(await modelOf(checkResponse(assignedFull, inboxFull)), "owner-1/repo-2");
     const row = (number: number) => inbox.find((pr) => pr.number === number);
     const response = structuredClone(inboxFull);
@@ -1695,9 +1706,9 @@ describe("Feature grouping in a GitHub repository", () => {
 
     const model = await app.pageModel();
     expect(model.repositories.find((repository) => repository.name === "owner-1/repo-2")?.reviewInbox).toEqual([
-      { feature: "Feature 2", prs: [row(10404)] },
-      { feature: "Feature 1", prs: [row(10419), row(10306)] },
       { feature: null, prs: [row(10255)] },
+      { feature: "Feature 1", prs: [row(10419), row(10306)] },
+      { feature: "Feature 2", prs: [row(10404)] },
     ]);
   });
 
@@ -1748,8 +1759,8 @@ describe("Feature grouping in a GitHub repository", () => {
     await app.check();
 
     expect(groupsOf(await app.pageModel(), "owner-1/repo-2")).toEqual([
-      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968, 10412) },
       { feature: null, prs: rows("owner-1/repo-2", 10420) },
+      { feature: "Feature 1", prs: rows("owner-1/repo-2", 9968, 10412) },
     ]);
   });
 
