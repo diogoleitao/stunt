@@ -41,11 +41,6 @@ export type ReviewInboxPR = {
   reRequest: boolean;
 };
 
-// A request too old for the check to have read is older than any other.
-export function requestTime({ request }: Pick<ReviewInboxPR, "request">): number {
-  return request === null ? -Infinity : Date.parse(request.waitingSince);
-}
-
 export type ReviewDecision = "REVIEW_REQUIRED" | "APPROVED" | "CHANGES_REQUESTED";
 
 export type Review = {
