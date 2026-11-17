@@ -14,7 +14,7 @@
   "scripts": {
     "dev": "next dev --hostname 127.0.0.1 --port 4848",
     "build": "next build && npm run tsc7 -- -p tsconfig.cli.json",
-    "prepare": "npm run build",
+    "prepare": "(git config core.hooksPath .githooks || true) && npm run build",
     "tsc7": "node node_modules/typescript7/bin/tsc",
     "typecheck": "npm run tsc7 -- --noEmit && npm run tsc7 -- -p tsconfig.cli.json --noEmit",
     "lint": "eslint .",
